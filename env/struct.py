@@ -137,8 +137,7 @@ def calculate_compliance(H,conditions):
     magnitude_x=conditions['magnitude_x']  
     magnitude_y=conditions['magnitude_y']
     
-    #Define loads and supports(Short beam)
-     #Define loads and supports(Short beam)
+    #Define loads and supports
     alldofs=np.arange(0,2*(nely+1)*(nelx+1))
     freedofs=np.setdiff1d(alldofs,fixeddofs)
     F_x=csc_matrix(([magnitude_x[0]], ([loaddof_x[0]], [0])), shape=(2*(nely+1)*(nelx+1), 1))
@@ -235,7 +234,6 @@ def calculate_compliance(H,conditions):
             s11, s22, s12 = EB_void.dot(elem_disp)
         else:
             s11, s22, s12 = EB_filled.dot(elem_disp)
-        #s11, s22, s12 = EB_filled.dot(elem_disp)
 
         #Von mises stress
         vm_stress = np.sqrt((s11**2) - (s11 * s22) + (s22**2) + (3 * s12**2))  #General plane stress

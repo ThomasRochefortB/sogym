@@ -1,8 +1,11 @@
 import gym
-from struct import *
+from env.struct import *
+import numpy as np
+import random
+import matplotlib.pyplot as plt
 
-
-class CustomEnv(gym.Env):
+#Class defining the Structural Optimization Gym environment (so-gym):
+class sogym(gym.Env):
 
     def __init__(self):
         self.nelx=100
@@ -68,7 +71,7 @@ class CustomEnv(gym.Env):
                             }
 
 
-        return self.observation  # reward, done, info can't be included
+        return self.observation 
         
         
     def step(self, action):
