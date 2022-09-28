@@ -102,8 +102,7 @@ class sogym(gym.Env):
             compliance,self.volume,self.vmstress=calculate_compliance(self.H,self.conditions)
             
             if self.volume<= self.out_conditions[6]:
-                reward=(1/(compliance+1e-8))
-                reward=reward[0][0]
+                reward=(1/(compliance+1e-8))[0][0]
                 self.final_img=self.proj_img
             else:
                 reward=0
