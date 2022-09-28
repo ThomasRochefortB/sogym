@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
+env/.ipynb_checkpoints/*
