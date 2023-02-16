@@ -3,279 +3,308 @@ os.environ['OPENBLAS_NUM_THREADS'] = '1'
 import numpy as np
 import math
 import numpy.matlib
-from scipy.sparse import coo_matrix, csc_matrix
+from scipy.sparse import coo_matrix, csc_matrix, lil_matrix
 from scipy.sparse.linalg import spsolve
+from scipy.sparse import diags
 
 
-#Element stiffness matrix
-def BasicKe(E,nu, a, b,h):
-    k=np.array([-1/6/a/b*(nu*a**2-2*b**2-a**2), 1/8*nu+1/8, -1/12/a/b*(nu*a**2+4*b**2-a**2),3/8*nu-1/8, 1/12/a/b*(nu*a**2-2*b**2-a**2),-1/8*nu-1/8, 1/6/a/b*(nu*a**2+b**2-a**2), -3/8*nu+1/8])
-    KE=E*h/(1-nu**2)*np.array(
-    [ [k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7]],
-    [k[1], k[0], k[7], k[6], k[5], k[4], k[3], k[2]],
-    [k[2], k[7], k[0], k[5], k[6], k[3], k[4], k[1]],
-    [k[3], k[6], k[5], k[0], k[7], k[2], k[1], k[4]],
-    [k[4], k[5], k[6], k[7], k[0], k[1], k[2], k[3]],
-    [k[5], k[4], k[3], k[2], k[1], k[0], k[7], k[6]],
-    [k[6], k[3], k[4], k[1], k[2], k[7], k[0], k[5]],
-    [k[7], k[2], k[1], k[4], k[3], k[6], k[5], k[0]] ])
-    return KE
+# Element stiffness matrix (plane stress quadrilateral elements)
+def Ke_tril(E,nu,a,b,h):
+    """
+    This function returns the stiffness matrix of a plane stress quadrilateral uniform/standard element
+    """
+    k1 = [-1/6/a/b*(nu*a**2-2*b**2-a**2),  1/8*nu+1/8, -1/12/a/b*(nu*a**2+4*b**2-a**2), 3/8*nu-1/8, 1/12/a/b*(nu*a**2-2*b**2-a**2),-1/8*nu-1/8,  1/6/a/b*(nu*a**2+b**2-a**2),   -3/8*nu+1/8]
+    k2 = [-1/6/a/b*(nu*b**2-2*a**2-b**2),  1/8*nu+1/8, -1/12/a/b*(nu*b**2+4*a**2-b**2), 3/8*nu-1/8, 1/12/a/b*(nu*b**2-2*a**2-b**2),-1/8*nu-1/8,  1/6/a/b*(nu*b**2+a**2-b**2),   -3/8*nu+1/8]
+    Ke = E*h/(1-nu**2)*np.array(
+        [k1[0],k1[1],k1[2],k1[3],k1[4],k1[5],k1[6],k1[7],k2[0],k2[7],k2[6],k2[5],
+         k2[4],k2[3],k2[2],k1[0],k1[5],k1[6],k1[3],k1[4],k1[1],k2[0],k2[7],k2[2],
+         k2[1],k2[4],k1[0],k1[1],k1[2],k1[3],k2[0],k2[7],k2[6],k1[0],k1[5],k2[0]]
+                                )
+    return Ke
 
 
-#Forming Phi_i for each component
-def tPhi(xy,LSgridx,LSgridy,p):
-    st=xy[6]
-    ct=np.sqrt(abs(1-(st*st)))
-    x1=ct*(LSgridx - xy[0])+st*(LSgridy - xy[1])
-    y1=-st*(LSgridx - xy[0])+ct*(LSgridy -xy[1])
-    bb=((xy[4]+xy[3]-2*xy[5])/((2*xy[2]**2)))*(x1**2) + ((xy[4]-xy[3])/((2*xy[2])))*x1 + xy[5]
-    tmpPhi=-(((x1)**p)/((xy[2]**p)) + (((y1)**p)/((bb**p))) -1)
-    return tmpPhi
+# Topology description function and derivatives
+def calc_Phi(allPhi,xval,i,LSgrid,p,nEhcp,epsilon):
+    
+    dd = xval[:,i]
+    x0 = dd[0]
+    y0 = dd[1]
+    L = dd[2] + np.spacing(1)
+    t1 = dd[3]
+    t2 = dd[4] 
+    st = np.sin(dd[5])
+    ct = np.cos(dd[5])  
+    
+    x1 = ct*(LSgrid['x']-x0) + st*(LSgrid['y']-y0) + np.spacing(1)                   # local x of each grid
+    y1 = -st*(LSgrid['x']-x0) + ct*(LSgrid['y']-y0) + np.spacing(1)                  # local y of each grid
+    l = (t1+t2)/2 + (t2-t1)/2/L*x1 + np.spacing(1)
+    temp = ((x1)**p)/((L**p)+1e-08) + ((y1)**p)/((l**p)+1e-08)
+    allPhi[:,i] = 1 - temp**(1/p)                                    # TDF of i-th component
+    return allPhi
 
-#Heaviside function
-def Heaviside(phi,alpha,nelx,nely,epsilon):
-    phi=phi.flatten(order='F')
-    num_all=np.arange(0,(nelx+1)*(nely+1))
-    H=np.ones((nelx+1)*(nely+1))
+#Smoothed Heaviside function
+def Heaviside(phi,alpha,epsilon):
+    H = 3*(1-alpha)/4*(phi/epsilon-phi**3/(3*(epsilon)**3)) + (1+alpha)/2
+    H=np.where(phi>epsilon,1,H)
     H=np.where(phi<-epsilon,alpha,H)
-    H=np.where((phi>= -epsilon) & (phi<= epsilon),((3*(1-alpha)/4)*((phi/epsilon)-(phi**3/(3*(epsilon)**3)))+(1+alpha)/2),H)
     return H
 
 #Function that generates problem conditions (loading, support, volfrac)
-def generate_problem():
-    nelx=100
-    nely=50
-    #Changing conditions
-    volfractions=[0.3,0.4,0.5]
-    conditions=['A','B','C','A_0','B_0','C_0']
-    BC_saved=[]
-    for volumes in volfractions:
-        for cond in conditions:
-            fixed_nodes=np.zeros(((nely+1),(nelx+1)))
-            load_nodes=np.zeros(((nely+1),(nelx+1)))
+def generate_problem(nelx=100,nely=50, mode = 'train'):
+    """
+    This function generates the problem conditions for the agent to solve
+    """
+    if mode == 'train':   # We define the training distribution of boundary conditions that the agent will encounter during training
+        volfractions =[
+            0.3,
+            0.4,
+            0.5
+        ]
+        conditions=['A','B','C','A_0','B_0','C_0']
+        BC_saved=[]
+        for volumes in volfractions:
+            for cond in conditions:
+                fixed_nodes=np.zeros(((nely+1),(nelx+1)))
+                load_nodes=np.zeros(((nely+1),(nelx+1)))
 
-            if cond == 'A': 
-                fixed_nodes[0,0:50]=1
-                load_nodes[:,-50:]=1
-                direct=[45,90,225,270]
+                if cond == 'A': 
+                    fixed_nodes[0,0:nelx//2]=1
+                    load_nodes[:,-1]=1
+                    direct=[45,90,225,270]
 
-            if cond == 'B':
-                fixed_nodes[-1,0:50]=1
-                load_nodes[:,-50:]=1
-                direct=[90,135,270,305]
+                if cond == 'B':
+                    fixed_nodes[-1,0:nelx//2]=1
+                    load_nodes[:,-1]=1
+                    direct=[90,135,270,305]
 
-            if cond == 'C':
-                fixed_nodes[:,0]=1
-                load_nodes[:,-50:]=1
-                direct=[45,90,135,225,270,305]
+                if cond == 'C':
+                    fixed_nodes[:,0]=1
+                    load_nodes[:,-1]=1
+                    direct=[45,90,135,225,270,305]
 
-            if cond =='A_0':
-                fixed_nodes[0,51:-1]=1
-                load_nodes[:,0:50]=1
-                direct=[90,135,270,305]
+                if cond =='A_0':
+                    fixed_nodes[0,nelx//2+1:-1]=1
+                    load_nodes[:,0]=1
+                    direct=[90,135,270,305]
 
-            if cond =='B_0':
-                fixed_nodes[-1,51:-1]=1
-                load_nodes[:,0:50]=1
-                direct=[45,90,225,270]
+                if cond =='B_0':
+                    fixed_nodes[-1,nelx//2+1:-1]=1
+                    load_nodes[:,0]=1
+                    direct=[45,90,225,270]
 
-            if cond =='C_0':
-                fixed_nodes[:,-1]=1
-                load_nodes[:,0:50]=1
-                direct=[45,90,135,225,270,305]
+                if cond =='C_0':
+                    fixed_nodes[:,-1]=1
+                    load_nodes[:,0]=1
+                    direct=[45,90,135,225,270,305]
+                for angle in direct:
+                    #generate the fixeddofs:
+                    fixednode=np.argwhere(fixed_nodes.reshape((((nely+1))*((nelx+1))),order='F')==1)
+                    fixeddofs=[]
+                    for i in range(0,len(fixednode)):
+                        fixeddofs.append(2*fixednode[i])
+                        fixeddofs.append((2*fixednode[i])+1)
 
-            for angle in direct:
-                #generate the fixeddofs:
-                fixednode=np.argwhere(fixed_nodes.reshape((((nely+1))*((nelx+1))),order='F')==1)
-                fixeddofs=[]
-                for i in range(0,len(fixednode)):
-                    fixeddofs.append(2*fixednode[i])
-                    fixeddofs.append((2*fixednode[i])+1)
+                    # generate the loaddofs:
+                    loadnodes=np.argwhere(load_nodes.reshape((((nely+1))*((nelx+1))),order='F')==1)
+                    for loadnode in loadnodes:
+                        loaddof_x=[2*loadnode]
+                        loaddof_y=[(2*loadnode)+1]
 
-                # generate the loaddofs:
-                loadnodes=np.argwhere(load_nodes.reshape((((nely+1))*((nelx+1))),order='F')==1)
-                for loadnode in loadnodes:
-                    loaddof_x=[2*loadnode]
-                    loaddof_y=[(2*loadnode)+1]
+                        magnitude_x=np.array([np.cos(np.radians(angle))])
+                        magnitude_y=np.array([np.sin(np.radians(angle))])        
 
-                    magnitude_x=np.array([np.cos(np.radians(angle))])
-                    magnitude_y=np.array([np.sin(np.radians(angle))])        
+                        data_save={
+                            'fixeddofs':fixeddofs,
+                            'loaddof_x':loaddof_x,
+                            'loaddof_y':loaddof_y,
+                            'magnitude_x':magnitude_x,
+                            'magnitude_y':magnitude_y,
+                            'volfrac':volumes,
+                            'direct':direct,
+                            'loadnode':loadnode,
+                            'fixednode':fixednode
+                        }
+                        BC_saved.append(data_save)
+        return BC_saved
+                
+    elif mode == 'test': # we define the test distribution of boundary conditions that the agent will encounter during testing to evaluate extrapolation generalization
+        volfractions =[
+            0.35,
+            0.45,
+            0.55
+        ]
+        conditions=['Y','Y_0','Z','Z_0']
+        BC_saved=[]
+        for volumes in volfractions:
+            for cond in conditions:
+                fixed_nodes=np.zeros(((nely+1),(nelx+1)))
+                load_nodes=np.zeros(((nely+1),(nelx+1)))
 
-                    data_save={
-                        'fixeddofs':fixeddofs,
-                        'loaddof_x':loaddof_x,
-                        'loaddof_y':loaddof_y,
-                        'magnitude_x':magnitude_x,
-                        'magnitude_y':magnitude_y,
-                        'volfrac':volumes,
-                        'direct':direct,
-                        'loadnode':loadnode,
-                        'fixednode':fixednode
-                    }
-                    BC_saved.append(data_save)
-    return BC_saved
+                if cond == 'Y': 
+                    fixed_nodes[0,nelx//4:-nelx//4]=1
+                    load_nodes[-1,:]=1
+                    direct=[0,180]
 
-#Function that takes the heaviside projection and the boundary conditions and calculates the compliance plus volume
-def calculate_compliance(H,conditions):
+                if cond == 'Y_0':
+                    fixed_nodes[-1,nelx//4:-nelx//4]=1
+                    load_nodes[0,:]=1
+                    direct=[0,180]
+
+                if cond == 'Z':
+                    fixed_nodes[nely//2:nely,0]=1
+                    load_nodes[0,nelx//2:-1]=1
+                    direct=[90,135,270,305]
+
+                if cond =='Z_0':
+                    fixed_nodes[nely//2:nely,-1]=1
+                    load_nodes[0,0:nelx//2]=1
+                    direct=[90,135,270,305]
+                for angle in direct:
+                    #generate the fixeddofs:
+                    fixednode=np.argwhere(fixed_nodes.reshape((((nely+1))*((nelx+1))),order='F')==1)
+                    fixeddofs=[]
+                    for i in range(0,len(fixednode)):
+                        fixeddofs.append(2*fixednode[i])
+                        fixeddofs.append((2*fixednode[i])+1)
+
+                    # generate the loaddofs:
+                    loadnodes=np.argwhere(load_nodes.reshape((((nely+1))*((nelx+1))),order='F')==1)
+                    for loadnode in loadnodes:
+                        loaddof_x=[2*loadnode]
+                        loaddof_y=[(2*loadnode)+1]
+
+                        magnitude_x=np.array([np.cos(np.radians(angle))])
+                        magnitude_y=np.array([np.sin(np.radians(angle))])        
+
+                        data_save={
+                            'fixeddofs':fixeddofs,
+                            'loaddof_x':loaddof_x,
+                            'loaddof_y':loaddof_y,
+                            'magnitude_x':magnitude_x,
+                            'magnitude_y':magnitude_y,
+                            'volfrac':volumes,
+                            'direct':direct,
+                            'loadnode':loadnode,
+                            'fixednode':fixednode
+                        }
+                        BC_saved.append(data_save)
+        return BC_saved
+
+
+    else:
+        raise ValueError('mode must be either train or test')
+
+
     
-    DW=2.0
-    DH=1.0
-    nelx=100
-    nely=50
+#Function that takes the heaviside projection and the boundary conditions and calculates the compliance plus volume
+def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
+    """"
+    This function takes the heaviside projection and the boundary conditions and calculates the compliance plus volume
+    """
+   
      # Material properties
     h=1 #thickness
     E=1
     nu=0.3
     
     # FEM data initialization
-    M=[nely+1, nelx+1]
     EW=DW / nelx # length of element
     EH=DH / nely # width of element
-    fixeddofs=conditions['fixeddofs']
+    fixDof=conditions['fixeddofs']
     loaddof_x=conditions['loaddof_x'][0]
     loaddof_y=conditions['loaddof_y'][0]
     magnitude_x=conditions['magnitude_x']  
     magnitude_y=conditions['magnitude_y']
     
-    #Define loads and supports
-    alldofs=np.arange(0,2*(nely+1)*(nelx+1))
-    freedofs=np.setdiff1d(alldofs,fixeddofs)
-    F_x=csc_matrix(([magnitude_x[0]], ([loaddof_x[0]], [0])), shape=(2*(nely+1)*(nelx+1), 1))
-    F_y=csc_matrix(([magnitude_y[0]], ([loaddof_y[0]], [0])), shape=(2*(nely+1)*(nelx+1), 1))
+    ## Setting of FE discretization
+    nEle = nelx*nely              # number of finite elements
+    nNod = (nelx+1)*(nely+1)      # number of nodes
+    nDof = 2*(nelx+1)*(nely+1)    # number of degree of freedoms
+    Ke = Ke_tril(E,nu,EW,EH,h)  # non-zero upper triangular of ele. stiffness 
+    KE=np.tril(np.ones(8)).flatten(order='F')
+    KE[KE==1] = Ke.T
+    KE=KE.reshape((8,8),order='F')
+    KE = KE + KE.T - np.diag(np.diag(KE))           # full elemental stiffness matrix
+    nodMat = np.reshape(np.array(range(0,nNod)),(1+nely,1+nelx),order='F')                    # maxtrix of nodes numbers (int32)
+    edofVec = np.reshape(2*nodMat[0:-1,0:-1],(nEle,1),order='F')
+    edofMat = edofVec + np.array([0, 1, 2*nely+2,2*nely+3, 2*nely+4, 2*nely+5, 2, 3])              # connectivity matrix
+    eleNodesID = edofMat[:,0:8:2]/2    
+    sI,sII = np.array([]),np.array([])
+    for j in range(0,7):
+        sI=np.concatenate((sI,np.linspace(j,7,8-j)))
+        sII=np.concatenate((sII,np.matlib.repmat(j,1,8-j).squeeze()))
+    sII=np.concatenate((sII,np.array([7])))
+    sI=np.concatenate((sI,np.linspace(7,7,8-7)))
+    iK,jK = edofMat[:,np.int32(sI)].T,edofMat[:,np.int32(sII)].T
+    Iar0 = np.fliplr(np.sort(np.array([iK.flatten(order='F'),jK[:].flatten(order='F')]).T,axis=1) )        # reduced assembly indexing
+    
+    fixEle=[]
+    for i in range(0,len(fixDof)):
+        fixEle.append(np.argwhere(edofMat==fixDof[i])[0][0])                              # elements related to fixed nodes
+    fixEle=np.unique(fixEle)
+    freeDof = np.setdiff1d(np.arange(nDof),fixDof)         # index of free dofs
+
+    loadEle=np.array([
+        np.argwhere(edofMat==loaddof_x)[0][0],
+        np.argwhere(edofMat==loaddof_y)[0][0]
+    ])
+
+    loadEle=np.unique(loadEle)
+    F_x=csc_matrix(([magnitude_x[0]], ([loaddof_x[0]], [0])), shape=(nDof, 1))
+    F_y=csc_matrix(([magnitude_y[0]], ([loaddof_y[0]], [0])), shape=(nDof, 1))
     F=F_x+F_y
     
-    nodenrs=np.arange(0,(1+nelx)*(1+nely)).reshape(1+nely,1+nelx,order='F')
-    edofVec=((2*nodenrs[0:-1,0:-1])).reshape(nelx*nely,1,order='F')
-    edofMat=np.matlib.repmat(edofVec,1,8)+np.matlib.repmat(np.concatenate([np.array([0,1]),2*nely+np.array([2,3,4,5]),np.array([2,3])],axis=0),nelx*nely,1)
-    iK=np.kron(edofMat,np.ones((8,1))).T
-    jK=np.kron(edofMat,np.ones((1,8))).T
-    EleNodesID=(edofMat[:,(1,3,5,7)]-1)/2
-    iEner=EleNodesID.T
-    KE=BasicKe(E,nu, EW, EH,h) # stiffness matrix k**s is formed
-    #FEA
-    denk=np.sum(H[EleNodesID.astype(int)]**2, axis=1) / 4
-    den=np.sum(H[EleNodesID.astype(int)], axis=1) / 4
-    A1=np.sum(den)*EW*EH
-    U=np.zeros((2*(nely+1)*(nelx+1),1))
-    sK=np.expand_dims(KE.flatten(order='F'),axis=1)@(np.expand_dims(denk.flatten(order='F'),axis=1).T)
-    K = coo_matrix((sK.flatten(order='F'),(iK.flatten(order='F'),jK.flatten(order='F'))),shape=(2*(nely+1)*(nelx+1),2*(nely+1)*(nelx+1))).tocsc()
-    # Remove constrained dofs from matrix
-    K = K[freedofs,:][:,freedofs]
-    # Solve system 
-    U[freedofs,0]=spsolve(K,F[freedofs,0])
-    #Energy of element
-    energy=np.sum((U[edofMat][:,:,0]@KE)*U[edofMat][:,:,0],axis=1)
-    sEner=np.ones((4,1))@np.expand_dims(energy,axis=1).T/4
-    energy_nod=csc_matrix((sEner.flatten(order='F'), (iEner.flatten(order='F').astype(int),np.zeros((len(sEner.flatten(order='F')),)).astype(int))))
-    Comp=F.T@U
-    volume=A1/(DW*DH)
     
-    #Initialize empty matrices
-    u_x=np.zeros(((nely+1),((nelx+1))))
-    u_y=np.zeros(((nely+1),((nelx+1))))
+   
+    den = np.sum(H[eleNodesID.astype('int')],1)/4                                 # elemental density vector (for volume)
+    U = np.zeros((nDof,1))
+    
+    sK = np.multiply(np.reshape(Ke.flatten(order='F'),(Ke.flatten(order='F').shape[0],1)),np.reshape(den,(den.shape[0],1)).T)
+    sK = sK.flatten(order='F')
+    K = csc_matrix((sK.flatten(order='F'), (Iar0[:,0], Iar0[:,1])), shape=(nDof, nDof))
+    K =  K + K.T - diags((K.diagonal()))
+    U[freeDof] =spsolve(K[freeDof,:][:,freeDof], F[freeDof]).reshape((len(freeDof),1))
 
-    counterx=0
-    for j in range(0,np.shape(u_x)[1]):
-        for i in range(0,np.shape(u_x)[0]):
-            u_x[i][j]=U[counterx]
-            counterx+=2
-
-    countery=1
-    for j in range(0,np.shape(u_y)[1]):
-        for i in range(0,np.shape(u_y)[0]):
-            u_y[i][j]=U[countery]
-            countery+=2
-    Umag=np.sqrt(u_x**2+u_y**2)
-    #Creation of B, the strain-displacement matrix. Here it is precomputed for a regular 2D square element
-    n = -0.5
-    nu=0.3
-    p = 0.5 
-    B=np.array([[n,0,p,0,p,0,n,0],
-                [0,n,0,n,0,p,0,p],
-                [n,n,n,p,p,p,p,n]])
-    Emax=1.0
-    Emin=1e-6
-    #Creation of E,
-    E_filled=np.array([[1, nu, 0],
-                [nu, 1, 0],
-                [0, 0, (1 - nu) / 2.]])*(Emax / (1 - nu**2))
-
-    E_void=np.array([[1, nu, 0],
-                [nu, 1, 0],
-                [0, 0, (1 - nu) / 2.]])*(Emin / (1 - nu**2))
-
-    # Creation of EB, dot product of E*B
-    EB_filled = E_filled.dot(B)
-    EB_void=E_void.dot(B)
-    # Now we need to iterate through our displacements, and gather all the displacements of the 4 nodes for each element
-
-    #Initialize some empty matrices:
-    stressx=[]
-    stressy=[]
-    shear=[]
-    vmstress=[]
-
-    ### Will output a list with each element's sigmax,sigmay and sigmaxy (shear)
-    elem_disp=np.zeros((8,1))
-
-    for i in range(0,len(edofMat)):
-        elem_disp[0,0]=U[edofMat[i][0]]
-        elem_disp[1,0]=U[edofMat[i][1]]
-        elem_disp[2,0]=U[edofMat[i][2]]
-        elem_disp[3,0]=U[edofMat[i][3]]
-        elem_disp[4,0]=U[edofMat[i][4]]
-        elem_disp[5,0]=U[edofMat[i][5]]
-        elem_disp[6,0]=U[edofMat[i][6]]
-        elem_disp[7,0]=U[edofMat[i][7]]
-
-        #Principal stress (dot product of EB with element displacement)
-
-        if denk[i]<0.5:
-            s11, s22, s12 = EB_void.dot(elem_disp)
-        else:
-            s11, s22, s12 = EB_filled.dot(elem_disp)
-
-        #Von mises stress
-        vm_stress = np.sqrt((s11**2) - (s11 * s22) + (s22**2) + (3 * s12**2))  #General plane stress
-        vmstress.append(vm_stress)
-    vmstress=np.array(vmstress).reshape((nely,nelx),order='F')
-    return Comp,volume,vmstress
+    f0val = F.T*U
+    
+    Comp=f0val
+    volume=sum(den)*EH*EW/(DH*DW)
+    
+    return Comp,volume
 
 
 #Function that takes a variable vector, and generates the contours of the components
-def build_design(variable):
-    DW=2.0
-    DH=1.0
+def build_design(variable,DW=2.0,DH=1.0,nelx=100,nely=50):
+    xval=variable
+    lmd = 100    #power of KS aggregation                                     
+
     nelx=100
     nely=50
+    nEle = nelx*nely              # number of finite elements
+
     p=6
     alpha=1e-9 # parameter alpha in the Heaviside function
     epsilon=0.2
-
-    Var_num=7 # number of design variablesfor each component
-
-
-    M=[nely+1, nelx+1]
-    EW=DW / nelx # length of element
-    EH=DH / nely # width of element
+    N=variable.shape[1]
+    actComp = np.arange(0,N)               # initial set of active components 
+    nEhcp = 6                      # number design variables each component
+    nNod = (nelx+1)*(nely+1)      # number of nodes
+    
+    allPhi = np.zeros((nNod,N))   
     x,y=np.meshgrid(np.linspace(0, DW,nelx+1),np.linspace(0,DH,nely+1))
     LSgrid={"x":x.flatten(order='F'),"y":y.flatten(order='F')}
+    nodMat = np.reshape(np.array(range(0,nNod)),(1+nely,1+nelx),order='F')                    # maxtrix of nodes numbers (int32)
+    edofVec = np.reshape(2*nodMat[0:-1,0:-1],(nEle,1),order='F')
+    edofMat = edofVec + np.array([0, 1, 2*nely+2,2*nely+3, 2*nely+4, 2*nely+5, 2, 3])              # connectivity matrix
+    eleNodesID = edofMat[:,0:8:2]/2    
     
-    #We need to take into account a variable number of components
-    N=variable.shape[1]
-    Phi=[None] * N
-    #Forming Phi^s
-    for i in range(0,N):
-        Phi[i]=tPhi(variable[:,i],LSgrid['x'],LSgrid['y'],p)
-    Phi_out=Phi
-    #Union of components
-    tempPhi_max=Phi[0]
+    for i in actComp:                      # calculating TDF of the active MMCs                                                            
+        allPhi = calc_Phi(allPhi,xval,i,LSgrid,p,nEhcp,epsilon)
+    temp = np.exp(lmd*allPhi)
+    temp = np.where(temp==0,1e-08,temp)
+    Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        # global TDF using K-S aggregation
+     #%--------------------------LP 3): Finite element analysis
+    H = Heaviside(Phimax,alpha,epsilon)                            # nodal density vector 
+    den = np.sum(H[eleNodesID.astype('int')],1)/4                                 # elemental density vector (for volume)
 
-    for i in range(1,N):
-        tempPhi_max=np.maximum(tempPhi_max,Phi[i])
-    
-    Phi_max=tempPhi_max.reshape((nely+1,nelx+1),order='F')
-    #Heaviside projection:
-    H=Heaviside(Phi_max,alpha,nelx,nely,epsilon)
-    
-    return H, Phi_out
+    return H, Phimax,allPhi, den
