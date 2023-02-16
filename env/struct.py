@@ -277,9 +277,6 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
 def build_design(variable,DW=2.0,DH=1.0,nelx=100,nely=50):
     xval=variable
     lmd = 100    #power of KS aggregation                                     
-
-    nelx=100
-    nely=50
     nEle = nelx*nely              # number of finite elements
 
     p=6

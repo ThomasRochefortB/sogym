@@ -23,7 +23,7 @@ class sogym(gym.Env):
         self.xmax=np.vstack((self.DW, self.DH, self.DW, self.DH, 0.3, 0.3)) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
         self.N_actions = 6
         
-        self.BC_dict=generate_problem(mode=mode)
+        self.BC_dict=generate_problem(nelx,nely,mode)
         self.x,self.y=np.meshgrid(np.linspace(0, self.DW,self.nelx+1),np.linspace(0,self.DH,self.nely+1))                # coordinates of nodal points
 
         # series of render color for the plot function
@@ -44,7 +44,7 @@ class sogym(gym.Env):
             #To define the image space here.
             self.observation_space = gym.spaces.Dict(
                                         spaces={
-                                            "image": gym.spaces.Box(0, 255, (64,128,3),dtype=np.uint8), # Image of the current design
+                                            "image": gym.spaces.Box(0, 255, (3,64,128),dtype=np.uint8), # Image of the current design
                                             "conditions": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
                                             "design_variables": gym.spaces.Box(-np.pi, np.pi, (self.N_components*self.N_actions,),dtype=np.float32),
@@ -86,7 +86,9 @@ class sogym(gym.Env):
         self.out_conditions=beta
         self.action_count=0
         self.saved_volume=[0.0]
-
+        self.plot_conditions = self.out_conditions
+        # I need to initialize an empty instance of Phi:
+        self.Phi = np.zeros(((self.nelx+1)*(self.nely+1), self.N_components))
         if self.observation_type=='dense':
             self.observation={"conditions":np.float32(self.out_conditions),
                             "design_variables":np.float32(self.variables.flatten()),
@@ -102,6 +104,7 @@ class sogym(gym.Env):
                             }
         else:
             raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
+
         return self.observation 
         
         
@@ -124,7 +127,7 @@ class sogym(gym.Env):
         self.variables_plot.append(formatted_variables)
 
         # We build the topology with the new design variables:
-        self.H, self.Phimax,self.Phi, den=build_design(np.array(self.variables_plot).T)    # self.H is the Heaviside projection of the design variables and self.Phi are the design surfaces.
+        self.H, self.Phimax,self.Phi, den=build_design(np.array(self.variables_plot).T, self.DW,self.DH, self.nelx,self.nely)    # self.H is the Heaviside projection of the design variables and self.Phi are the design surfaces.
         self.proj_img=self.H.reshape((1,self.nely+1,self.nelx+1),order='F')
         
         nEle = self.nelx*self.nely
@@ -145,7 +148,7 @@ class sogym(gym.Env):
 
         else: # We are at the end of the episode
             done=True
-            self.compliance,self.volume=calculate_compliance(self.H,self.conditions) # We calculate the compliance, volume and von Mises stress of the structure
+            self.compliance,self.volume=calculate_compliance(self.H,self.conditions,self.DW,self.DH,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
             
             if self.volume<= self.out_conditions[6]: # The desired volume fraction is respected
                 reward=(1/(self.compliance+1e-8)) # The reward is the inverse of the compliance (AKA the stiffness of the structure)
@@ -162,7 +165,7 @@ class sogym(gym.Env):
         elif self.observation_type=='image':
             self.observation = {"image":self.gen_image(resolution=(128,64)),
                     "conditions":np.float32(self.out_conditions),
-                    "design_variables":self.variables.flatten(),
+                    "design_variables":np.float32(self.variables.flatten()),
                     "volume":np.array([self.volume],dtype=np.float32),
                     "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                     }
@@ -250,5 +253,7 @@ class sogym(gym.Env):
         data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
         # Let's resize the image to something more reasonable using numpy:
         res = cv2.resize(data, dsize=(128, 64), interpolation=cv2.INTER_CUBIC)
+        # Convert res to channel first:
+        res = np.moveaxis(res, -1, 0)
         return res
     
