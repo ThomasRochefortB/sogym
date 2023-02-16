@@ -1,5 +1,5 @@
 import gym
-from env.struct import *
+from sogym.struct import *
 import numpy as np
 import random
 import matplotlib.pyplot as plt

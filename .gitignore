@@ -130,3 +130,5 @@ dmypy.json
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
 env/.ipynb_checkpoints/*
+env_saved.pkl
+model_saved.zip

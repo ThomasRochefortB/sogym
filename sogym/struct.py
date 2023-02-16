@@ -1,9 +1,7 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 import numpy as np
-import math
-import numpy.matlib
-from scipy.sparse import coo_matrix, csc_matrix, lil_matrix
+from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.sparse import diags
 
