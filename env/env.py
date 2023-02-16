@@ -17,6 +17,7 @@ class sogym(gym.Env):
         self.EH=self.DH / self.nely # width of element
         self.N_components = N_components
         self.mode = mode
+        self.observation_type = observation_type
         # Agent's actions control the (x,y) coordinates of the two endpoints as well as two thicknesses
         self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
         self.xmax=np.vstack((self.DW, self.DH, self.DW, self.DH, 0.3, 0.3)) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
@@ -30,7 +31,7 @@ class sogym(gym.Env):
 
         self.action_space = gym.spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
         
-        if observation_type =='dense':
+        if self.observation_type =='dense':
             self.observation_space = gym.spaces.Dict(
                                         spaces={
                                             "conditions": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
@@ -39,7 +40,7 @@ class sogym(gym.Env):
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )   
-        elif observation_type =='image':
+        elif self.observation_type =='image':
             #To define the image space here.
             self.observation_space = gym.spaces.Dict(
                                         spaces={

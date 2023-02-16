@@ -270,7 +270,7 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
     Comp=f0val
     volume=sum(den)*EH*EW/(DH*DW)
     
-    return Comp,volume
+    return Comp[0][0],volume
 
 
 #Function that takes a variable vector, and generates the contours of the components
