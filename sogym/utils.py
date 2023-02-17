@@ -1,5 +1,5 @@
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.logger import Image, Figure
+from stable_baselines3.common.logger import Figure
 import matplotlib.pyplot as plt
 
 # Class defining the callback to log figures in tensorboard:

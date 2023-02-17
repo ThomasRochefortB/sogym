@@ -140,7 +140,7 @@ class sogym(gym.Env):
         self.den=np.sum(self.H[eleNodesID.astype('int')],1)/4 
         self.volume=sum(self.den)*self.EW*self.EH/(self.DW*self.DH)
         
-        
+
         # The reward function is the sparse reward given only at the end of the episode if the desired volume fraction is respected.
         if self.action_count<self.N_components: # We are not at the end of the episode
             reward=0.0
@@ -148,6 +148,7 @@ class sogym(gym.Env):
 
         else: # We are at the end of the episode
             done=True
+            self.last_Phi = self.Phi
             self.compliance,self.volume=calculate_compliance(self.H,self.conditions,self.DW,self.DH,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
             
             if self.volume<= self.out_conditions[6]: # The desired volume fraction is respected
@@ -172,12 +173,11 @@ class sogym(gym.Env):
         else:
             raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
         self.saved_volume.append(self.volume)
-        self.plot_conditions = self.out_conditions
 
         return self.observation, reward, done, info
     
 
-    def plot(self, mode='human',test=None):
+    def plot(self, mode='human',test=None, train_viz=True):
         plt.rcParams["figure.figsize"] = (10,5)
         X=self.plot_conditions
         
@@ -223,8 +223,13 @@ class sogym(gym.Env):
 
         fig = plt.figure()
         ax = plt.subplot(111)
-        for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
-            ax.contourf(self.x,self.y,np.flipud(self.Phi[:,i].reshape((self.nely+1,self.nelx+1),order='F')),[0,1],colors=color)
+        if train_viz:
+            for i, color in zip(range(0,self.last_Phi.shape[1]), self.render_colors):
+                ax.contourf(self.x,self.y,np.flipud(self.last_Phi[:,i].reshape((self.nely+1,self.nelx+1),order='F')),[0,1],colors=color)
+        else:
+            for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
+                ax.contourf(self.x,self.y,np.flipud(self.Phi[:,i].reshape((self.nely+1,self.nelx+1),order='F')),[0,1],colors=color)
+        
         ax.add_patch(plt.Rectangle((patch_x+0.01,patch_y),patch_width, patch_height,hatch='/',
                                       clip_on=False,linewidth = 0))
 
@@ -245,7 +250,7 @@ class sogym(gym.Env):
 
     def gen_image(self,resolution=(128,64)):
         assert resolution[0] % resolution[1] == 0, "2x1 aspect ratio required"
-        fig = self.plot()
+        fig = self.plot(train_viz=False)
         fig.tight_layout(pad=0)
         fig.canvas.draw()
         # Now we can save it to a numpy array.
