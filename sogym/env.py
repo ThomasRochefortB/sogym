@@ -44,7 +44,9 @@ class sogym(gym.Env):
             #To define the image space here.
             self.observation_space = gym.spaces.Dict(
                                         spaces={
-                                            "image": gym.spaces.Box(0, 255, (3,64,128),dtype=np.uint8), # Image of the current design
+                                            #"image": gym.spaces.Box(0, 255, (3,64,128),dtype=np.uint8), # Image of the current design
+                                            "image": gym.spaces.Box(0, 255, (64,128,3),dtype=np.uint8), # Image of the current design
+
                                             "conditions": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
                                             "design_variables": gym.spaces.Box(-np.pi, np.pi, (self.N_components*self.N_actions,),dtype=np.float32),
@@ -253,12 +255,20 @@ class sogym(gym.Env):
         fig = self.plot(train_viz=False)
         fig.tight_layout(pad=0)
         fig.canvas.draw()
+        # Convert the canvas to an RGB numpy array
+        w, h = fig.canvas.get_width_height()
+        #print(w,h)
+        # Save the figure as a png
+        fig.savefig('test.png')
+        buf = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        #print(buf.shape)
+        buf.shape = (h, w, 3)
         # Now we can save it to a numpy array.
-        data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-        data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        #data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        #data = data.reshape((fig.canvas.get_width_height()[::-1] + (3,)))
         # Let's resize the image to something more reasonable using numpy:
-        res = cv2.resize(data, dsize=(128, 64), interpolation=cv2.INTER_CUBIC)
+        res = cv2.resize(buf, dsize=(128, 64), interpolation=cv2.INTER_CUBIC)
         # Convert res to channel first:
-        res = np.moveaxis(res, -1, 0)
+        #res = np.moveaxis(res, -1, 0)
         return res
     
