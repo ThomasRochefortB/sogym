@@ -15,10 +15,12 @@ def main():
       'batch_size': 16,
       'encoder.mlp_keys': ['conditions','volume','design_variables','n_steps_left'],
       'decoder.mlp_keys':  ['conditions','volume','design_variables','n_steps_left'],
-      'encoder.cnn_keys': '$^',
-      'decoder.cnn_keys': '$^',
+      'encoder.cnn_keys': 'image',
+      'decoder.cnn_keys': 'image',
        'jax.platform': 'cpu',
        'envs.amount':16,
+       'encoder.resize':'stride3',
+        'decoder.resize':'stride3',
   })
 
   logdir = embodied.Path(config.run.logdir)
@@ -41,7 +43,7 @@ def main():
   from functools import partial as bind
   from embodied import wrappers
 
-  env = sogym(nelx=100,nely=50,mode='train',observation_type='dense')  # Replace this with your Gym env.
+  env = sogym(nelx=100,nely=50,mode='train',observation_type='image')  # Replace this with your Gym env.
   env = from_gym.FromGym(env)
   def make_envs(config, **overrides):
     suite, task = config.task.split('_', 1)

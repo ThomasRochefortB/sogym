@@ -15,11 +15,13 @@ def main():
       'batch_size': 16,
       'encoder.mlp_keys': ['conditions','volume','design_variables','n_steps_left'],
       'decoder.mlp_keys':  ['conditions','volume','design_variables','n_steps_left'],
-      'encoder.cnn_keys': '$^',
-      'decoder.cnn_keys': '$^',
+      'encoder.cnn_keys': 'image',
+      'decoder.cnn_keys': 'image',
        'jax.platform': 'cpu',
-  })
+       'encoder.resize':'stride3',
+       'decoder.resize':'stride3',
 
+  })
   logdir = embodied.Path(config.run.logdir)
   step = embodied.Counter()
   logger = embodied.Logger(step, [
@@ -32,9 +34,9 @@ def main():
 
   import crafter
   from embodied.envs import from_gym
-  env = sogym(nelx=100,nely=50,mode='train',observation_type='dense')  # Replace this with your Gym env.
+  env = sogym(nelx=100,nely=50,mode='train',observation_type='image')  # Replace this with your Gym env.
   env = from_gym.FromGym(env)
-  env = dreamerv3.wrap_env(env, config.wrapper)
+  env = dreamerv3.wrap_env(env, config)
   env = embodied.BatchEnv([env], parallel=False)
 
   agent = dreamerv3.Agent(env.obs_space, env.act_space, step, config)
