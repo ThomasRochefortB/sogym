@@ -23,7 +23,7 @@ def Ke_tril(E,nu,a,b,h):
 
 
 # Topology description function and derivatives
-def calc_Phi(allPhi,xval,i,LSgrid,p,nEhcp,epsilon):
+def calc_Phi(allPhi,xval,i,LSgrid,p,nEhcp):
     
     dd = xval[:,i]
     x0 = dd[0]
@@ -269,7 +269,7 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
     Comp=f0val
     volume=sum(den)*EH*EW/(DH*DW)
     
-    return Comp[0][0],volume
+    return Comp[0][0],volume, U , F
 
 
 #Function that takes a variable vector, and generates the contours of the components
@@ -295,7 +295,7 @@ def build_design(variable,DW=2.0,DH=1.0,nelx=100,nely=50):
     eleNodesID = edofMat[:,0:8:2]/2    
     
     for i in actComp:                      # calculating TDF of the active MMCs                                                            
-        allPhi = calc_Phi(allPhi,xval,i,LSgrid,p,nEhcp,epsilon)
+        allPhi = calc_Phi(allPhi,xval,i,LSgrid,p,nEhcp)
     temp = np.exp(lmd*allPhi)
     temp = np.where(temp==0,1e-08,temp)
     Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        # global TDF using K-S aggregation

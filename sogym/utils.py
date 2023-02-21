@@ -16,4 +16,5 @@ class FigureRecorderCallback(BaseCallback):
             # Close the figure after logging it
             self.logger.record("trajectory/figure", Figure(figure, close=True), exclude=("stdout", "log", "json", "csv"))
             plt.close()
+            
         return True

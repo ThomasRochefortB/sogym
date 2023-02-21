@@ -7,17 +7,17 @@ def main():
 
   # See configs.yaml for all options.
   config = embodied.Config(dreamerv3.configs['defaults'])
-  config = config.update(dreamerv3.configs['small'])
+  config = config.update(dreamerv3.configs['medium'])
   config = config.update({
-      'run.logdir': '~/logdir/run1',
+      'run.logdir': 'logdir/run1',
       'run.train_ratio': 64,
       'run.log_every': 30,  # Seconds
       'batch_size': 16,
       'encoder.mlp_keys': ['conditions','volume','design_variables','n_steps_left'],
       'decoder.mlp_keys':  ['conditions','volume','design_variables','n_steps_left'],
-      'encoder.cnn_keys': 'image',
-      'decoder.cnn_keys': 'image',
-       'jax.platform': 'cpu',
+      'encoder.cnn_keys': '$^',
+      'decoder.cnn_keys': '$^',
+#       'jax.platform': 'cpu',
        'encoder.resize':'stride3',
        'decoder.resize':'stride3',
 
@@ -34,7 +34,7 @@ def main():
 
   import crafter
   from embodied.envs import from_gym
-  env = sogym(nelx=100,nely=50,mode='train',observation_type='image')  # Replace this with your Gym env.
+  env = sogym(nelx=100,nely=50,mode='train',observation_type='dense')  # Replace this with your Gym env.
   env = from_gym.FromGym(env)
   env = dreamerv3.wrap_env(env, config)
   env = embodied.BatchEnv([env], parallel=False)

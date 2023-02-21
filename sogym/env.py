@@ -44,8 +44,8 @@ class sogym(gym.Env):
             #To define the image space here.
             self.observation_space = gym.spaces.Dict(
                                         spaces={
-                                            #"image": gym.spaces.Box(0, 255, (3,64,128),dtype=np.uint8), # Image of the current design
-                                            "image": gym.spaces.Box(0, 255, (64,128,3),dtype=np.uint8), # Image of the current design
+                                            "image": gym.spaces.Box(0, 255, (3,64,128),dtype=np.uint8), # Image of the current design
+                                            #"image": gym.spaces.Box(0, 255, (64,128,3),dtype=np.uint8), # Image of the current design
 
                                             "conditions": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
@@ -151,7 +151,7 @@ class sogym(gym.Env):
         else: # We are at the end of the episode
             done=True
             self.last_Phi = self.Phi
-            self.compliance,self.volume=calculate_compliance(self.H,self.conditions,self.DW,self.DH,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
+            self.compliance,self.volume, self.U, self.F=calculate_compliance(self.H,self.conditions,self.DW,self.DH,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
             
             if self.volume<= self.out_conditions[6]: # The desired volume fraction is respected
                 reward=(1/(self.compliance+1e-8)) # The reward is the inverse of the compliance (AKA the stiffness of the structure)
@@ -269,6 +269,6 @@ class sogym(gym.Env):
         # Let's resize the image to something more reasonable using numpy:
         res = cv2.resize(buf, dsize=(128, 64), interpolation=cv2.INTER_CUBIC)
         # Convert res to channel first:
-        #res = np.moveaxis(res, -1, 0)
+        res = np.moveaxis(res, -1, 0)
         return res
     
