@@ -153,7 +153,7 @@ class sogym(gym.Env):
             self.last_Phi = self.Phi
             self.compliance,self.volume, self.U, self.F=calculate_compliance(self.H,self.conditions,self.DW,self.DH,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
             
-            if self.volume<= self.out_conditions[6]: # The desired volume fraction is respected
+            if self.volume<= self.out_conditions[6] and self.check_connec(): # The desired volume fraction is respected
                 reward=(1/(self.compliance+1e-8)) # The reward is the inverse of the compliance (AKA the stiffness of the structure)
             else:
                 reward=0.0
@@ -271,4 +271,53 @@ class sogym(gym.Env):
         # Convert res to channel first:
         res = np.moveaxis(res, -1, 0)
         return res
+
+    def check_connec(self):
+
+        # Load grayscale image
+        img = (self.den.reshape((self.nely,self.nelx),order='F'))
+
     
+
+        # Threshold the image to create a binary image with dark pixels as 1s and light pixels as 0s
+        thresh = cv2.threshold(img,0.1, 255, cv2.THRESH_BINARY)[1]
+        thresh = np.array(thresh,dtype=np.uint8)
+
+        # Apply a connected component analysis to find the connected components in the image
+        output = cv2.connectedComponentsWithStats(thresh, connectivity=8)
+        # The first cell is the number of labels
+        num_labels = output[0]
+        # The second cell is the label matrix
+        labels = output[1]
+        # The third cell is the stat matrix
+        stats = output[2]
+        # The fourth cell is the centroid matrix
+        centroids = output[3]
+
+        # Let's say we want to know if the load and the support boundaries are connected:
+        #Relative y position of load
+        #Relative x position of load
+        #Relative y position of support_1
+        #Relative x position of support_1
+        #Relative y position of support_2
+        #Relative x position of support_2
+        #Volume fraction (between 0 and 1)
+        #magnitude of load in x 
+        #magnitude of load in y 
+        y_load = int(self.out_conditions[0]*(self.nely))
+        x_load = int(self.out_conditions[1]*(self.nelx))
+        y_support_1 = int(self.out_conditions[2]*(self.nely))
+        x_support_1 = int(self.out_conditions[3]*(self.nelx))
+        y_support_2 = int(self.out_conditions[4]*(self.nely))
+        x_support_2 = int(self.out_conditions[5]*(self.nelx))
+
+        #labels of support_1 and support_2
+        label_support_1 = labels[y_support_1,x_support_1:x_support_2]
+
+        #labels of load:
+        label_load = labels[y_load,x_load]
+        if label_load !=0:
+            if label_load in label_support_1:
+                return True
+        else:
+            return False
