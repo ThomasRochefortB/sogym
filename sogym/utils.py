@@ -1,5 +1,9 @@
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import Figure
+from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+import gym
+import torch as th
+from torch import nn
 import matplotlib.pyplot as plt
 
 # Class defining the callback to log figures in tensorboard:
@@ -18,3 +22,73 @@ class FigureRecorderCallback(BaseCallback):
             plt.close()
             
         return True
+
+class ImageDictExtractor(BaseFeaturesExtractor):
+
+    def __init__(self, observation_space: gym.spaces.Dict,drop_rate=0.0,activ_func_string='relu',last_conv_size=64,mlp_size=128):
+        # We do not know features-dim here before going over all the items,
+        # so put something dummy for now. PyTorch requires calling
+        # nn.Module.__init__ before adding modules
+
+        super(ImageDictExtractor, self).__init__(observation_space, features_dim=1)
+        self.drop_rate = drop_rate
+        activations = {
+        'relu': nn.ReLU(),
+        'sigmoid': nn.Sigmoid(),
+        'tanh': nn.Tanh(),
+        'leaky_relu': nn.LeakyReLU(),}
+
+        self.activ_func = activations[activ_func_string]
+        self.last_conv_size = last_conv_size
+        self.mlp_size = mlp_size
+
+        extractors = {}
+        total_concat_size = 0
+        # We need to know size of the output of this extractor,
+        # so go over all the spaces and compute output feature sizes
+        for key, subspace in observation_space.spaces.items():
+            
+            if key =='image':
+                #image is channel-first in SB3 convention: (C, H, W)
+                #default is 64,128,3
+                input_h ,input_w, input_c = subspace.shape[1],subspace.shape[2],subspace.shape[0]
+                extractors[key]= nn.Sequential(
+                                                nn.Conv2d( input_c, 32, kernel_size=3, stride=2, padding=1), #Out is 64 x 32 x 32
+                                                nn.ReLU(),
+                                                nn.Dropout(p=self.drop_rate),
+                                                nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1), #Out is 32 x 16 x 64
+                                                nn.ReLU(),
+                                                nn.Dropout(p=self.drop_rate),
+                                                nn.Conv2d(64, self.last_conv_size, kernel_size=3, stride=2, padding=1), #Out is 16 x 8 x 64
+                                                nn.ReLU(),
+                                                nn.Dropout(p=self.drop_rate),
+                                                nn.Flatten(),
+                                            )
+                total_concat_size+= ((input_w * input_h) // 64)  * self.last_conv_size
+            
+            elif key == "design_variables" or key=="volume" or key=="n_steps_left" or key =="conditions":
+                # run through a simple MLP
+                extractors[key] = nn.Sequential(
+                                                nn.Linear(subspace.shape[0], self.mlp_size),
+                                                self.activ_func,
+                                                nn.Dropout(p=self.drop_rate),
+                                                nn.Linear(self.mlp_size,self.mlp_size),
+                                                self.activ_func,
+                                                nn.Dropout(p=self.drop_rate),
+                                                nn.Flatten()
+                                               )
+                total_concat_size += (self.mlp_size)
+  
+        self.extractors = nn.ModuleDict(extractors)
+
+        # Update the features dim manually
+        self._features_dim = total_concat_size
+
+    def forward(self, observations) -> th.Tensor:
+        encoded_tensor_list = []
+
+        # self.extractors contain nn.Modules that do all the processing.
+        for key, extractor in self.extractors.items():
+            encoded_tensor_list.append(extractor(observations[key]))
+        # Return a (B, self._features_dim) PyTorch tensor, where B is batch dimension.
+        return th.cat(encoded_tensor_list, dim=1)
