@@ -39,7 +39,11 @@ class sogym(gym.Env):
                                             "design_variables": gym.spaces.Box(-np.pi, np.pi, (self.N_components*self.N_actions,),dtype=np.float32),
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
-                                        )   
+                                        )
+        
+        elif self.observation_type =='box_dense':
+                                         self.observation_space = gym.spaces.Box(low=-np.pi, high=np.pi, shape=(9+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
+
         elif self.observation_type =='image':
             #To define the image space here.
             self.observation_space = gym.spaces.Dict(
@@ -55,7 +59,7 @@ class sogym(gym.Env):
                                         )   
             pass
         else:
-            raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
+            raise ValueError('Invalid observation space type. Only "dense", "box_dense" and "image" are supported.')
 
     def reset(self):
         self.random_int = random.randint(0,len(self.BC_dict)-1)
@@ -97,6 +101,14 @@ class sogym(gym.Env):
                             "volume":np.array([0.0],dtype=np.float32),
                             "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                             }
+        elif self.observation_type=='box_dense':        
+            self.observation=np.concatenate(
+                (np.float32(self.out_conditions),
+                 np.array([0.0],dtype=np.float32),
+                 np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
+                 np.float32(self.variables.flatten()))
+                 ,axis=0)
+
         elif self.observation_type=='image':
             self.observation={"image":self.gen_image(resolution=(128,64)),
                             "conditions":np.float32(self.out_conditions),
@@ -165,6 +177,14 @@ class sogym(gym.Env):
                     "volume":np.array([self.volume],dtype=np.float32),
                     "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                     }
+        elif self.observation_type=='box_dense':        
+            self.observation=np.concatenate(
+                (np.float32(self.out_conditions),
+                 np.array([self.volume],dtype=np.float32),
+                 np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
+                 np.float32(self.variables.flatten()))
+                 ,axis=0)
+                 
         elif self.observation_type=='image':
             self.observation = {"image":self.gen_image(resolution=(128,64)),
                     "conditions":np.float32(self.out_conditions),
