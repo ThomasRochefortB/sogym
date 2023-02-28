@@ -36,7 +36,7 @@ class sogym(gym.Env):
                                         spaces={
                                             "conditions": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": gym.spaces.Box(-np.pi, np.pi, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )
@@ -50,10 +50,9 @@ class sogym(gym.Env):
                                         spaces={
                                             "image": gym.spaces.Box(0, 255, (3,64,128),dtype=np.uint8), # Image of the current design
                                             #"image": gym.spaces.Box(0, 255, (64,128,3),dtype=np.uint8), # Image of the current design
-
                                             "conditions": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": gym.spaces.Box(-np.pi, np.pi, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )   
@@ -173,7 +172,7 @@ class sogym(gym.Env):
         info={}
         if self.observation_type=='dense':
             self.observation = {"conditions":np.float32(self.out_conditions),
-                    "design_variables":np.float32(self.variables.flatten()),
+                    "design_variables":np.float32(self.variables.flatten())/np.pi,
                     "volume":np.array([self.volume],dtype=np.float32),
                     "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                     }
@@ -182,13 +181,13 @@ class sogym(gym.Env):
                 (np.float32(self.out_conditions),
                  np.array([self.volume],dtype=np.float32),
                  np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
-                 np.float32(self.variables.flatten()))
+                 np.float32(self.variables.flatten())/np.pi)
                  ,axis=0)
                  
         elif self.observation_type=='image':
             self.observation = {"image":self.gen_image(resolution=(128,64)),
                     "conditions":np.float32(self.out_conditions),
-                    "design_variables":np.float32(self.variables.flatten()),
+                    "design_variables":np.float32(self.variables.flatten())/np.pi,
                     "volume":np.array([self.volume],dtype=np.float32),
                     "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                     }
