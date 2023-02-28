@@ -8,7 +8,7 @@ import cv2
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,nelx=100,nely=50,DW=2.0,DH=1.0,observation_type = 'dense',mode = 'train',img_format='CWH'):
+    def __init__(self,N_components=8,nelx=100,nely=50,DW=2.0,DH=1.0,observation_type = 'dense',mode = 'train',img_format='CHW'):
         self.nelx = nelx
         self.nely = nely
         self.DW = DW
@@ -26,12 +26,16 @@ class sogym(gym.Env):
         
         self.BC_dict=generate_problem(nelx,nely,mode)
         self.x,self.y=np.meshgrid(np.linspace(0, self.DW,self.nelx+1),np.linspace(0,self.DH,self.nely+1))                # coordinates of nodal points
-
+        
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
 
         self.action_space = gym.spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
-        
+        if self.img_format == 'CHW':
+            img_shape = (3,64,128)
+        elif self.img_format == 'HWC':
+            img_shape = (64,128,3)
+
         if self.observation_type =='dense':
             self.observation_space = gym.spaces.Dict(
                                         spaces={
@@ -49,8 +53,7 @@ class sogym(gym.Env):
             #To define the image space here.
             self.observation_space = gym.spaces.Dict(
                                         spaces={
-                                            "image": gym.spaces.Box(0, 255, (3,64,128),dtype=np.uint8), # Image of the current design
-                                            #"image": gym.spaces.Box(0, 255, (64,128,3),dtype=np.uint8), # Image of the current design
+                                            "image": gym.spaces.Box(0, 255, img_shape,dtype=np.uint8), # Image of the current design
                                             "conditions": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
                                             "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
@@ -289,7 +292,7 @@ class sogym(gym.Env):
         # Let's resize the image to something more reasonable using numpy:
         res = cv2.resize(buf, dsize=(128, 64), interpolation=cv2.INTER_CUBIC)
         # Convert res to channel first:
-        if self.img_format == 'CWH':
+        if self.img_format == 'CHW':
             res = np.moveaxis(res, -1, 0)
         return res
 
