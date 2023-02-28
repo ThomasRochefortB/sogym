@@ -22,6 +22,10 @@ def main():
     parser.add_argument('--n_envs', type=int, default=1)
     parser.add_argument('--normalize', type=bool, default=True)
     parser.add_argument('--l2_reg', type=float, default=0.0)
+    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--n_steps', type=int, default=2048)
+    parser.add_argument('--feature_extractor', type=str, default='default')
+    parser.add_argument('--net_arch', type=str, default='default')
     args = parser.parse_args()
 
     print('SB3 version:', stable_baselines3.__version__)
@@ -30,6 +34,7 @@ def main():
     print('Using device:', device)
 
     num_cpu = args.n_envs # Number of processes to use
+    print(num_cpu)
     train_env = sogym(mode='train',observation_type=args.obs_type)
     env= make_vec_env(lambda:train_env, n_envs=num_cpu,vec_env_cls=SubprocVecEnv)
     if args.normalize:
@@ -63,25 +68,28 @@ def main():
             verbose=0,
         ),])
 
-    policy_kwargs = dict(
-        features_extractor_class=ImageDictExtractor,
-        net_arch=dict(pi=[512,512,512], vf=[512,512,512]),
-                optimizer_kwargs={"weight_decay": args.l2_reg},
-    )
+
+    policy_kwargs=dict()
+    if args.feature_extractor != 'default':
+        policy_kwargs['features_extractor_class']=ImageDictExtractor
+    if args.net_arch != 'default':
+        policy_kwargs['net_arch']=dict(pi=[512,512,512], vf=[512,512,512])
+    if args.l2_reg != 0.0:
+        policy_kwargs['optimizer_kwargs']={"weight_decay": args.l2_reg}
 
     model = PPO(config['policy_type'],
                 env,
                 seed=args.seed,
                 policy_kwargs = policy_kwargs,
-                n_steps=2048//num_cpu,#(2048*16)//32,  #def: 224
-                batch_size=2048*2,#2048*2, #def: 50*224
+                n_steps=args.n_steps//num_cpu,
+                batch_size=args.batch_size,
                 verbose=0,
                 n_epochs=3,
                 vf_coef = 1.0,
                 clip_range = 0.3,
                 clip_range_vf = 10.0,
                 target_kl = 0.02,
-                gamma=1.0,  #def: 1
+                gamma=1.0, 
                 learning_rate=3e-4,
                 ent_coef=3e-4,
                 tensorboard_log="tb_logs",
