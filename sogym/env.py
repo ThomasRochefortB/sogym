@@ -8,7 +8,7 @@ import cv2
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,nelx=100,nely=50,DW=2.0,DH=1.0,observation_type = 'dense',mode = 'train'):
+    def __init__(self,N_components=8,nelx=100,nely=50,DW=2.0,DH=1.0,observation_type = 'dense',mode = 'train',img_format='CWH'):
         self.nelx = nelx
         self.nely = nely
         self.DW = DW
@@ -18,6 +18,7 @@ class sogym(gym.Env):
         self.N_components = N_components
         self.mode = mode
         self.observation_type = observation_type
+        self.img_format = img_format
         # Agent's actions control the (x,y) coordinates of the two endpoints as well as two thicknesses
         self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
         self.xmax=np.vstack((self.DW, self.DH, self.DW, self.DH, 0.3, 0.3)) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
@@ -288,7 +289,8 @@ class sogym(gym.Env):
         # Let's resize the image to something more reasonable using numpy:
         res = cv2.resize(buf, dsize=(128, 64), interpolation=cv2.INTER_CUBIC)
         # Convert res to channel first:
-        res = np.moveaxis(res, -1, 0)
+        if self.img_format == 'CWH':
+            res = np.moveaxis(res, -1, 0)
         return res
 
     def check_connec(self):
