@@ -336,12 +336,17 @@ class sogym(gym.Env):
         x_support_2 = int(self.out_conditions[5]*(self.nelx))
 
         #labels of support_1 and support_2
-        label_support_1 = labels[y_support_1,x_support_1:x_support_2]
-
+        if x_support_1 == x_support_2:
+            label_support = labels[y_support_1:y_support_2,x_support_1]
+        elif y_support_1==y_support_2:
+            label_support = labels[y_support_1,x_support_1:x_support_2]
+        else:
+            raise ValueError("Supports must be on the same line")
         #labels of load:
         label_load = labels[y_load,x_load]
+        
         if label_load !=0:
-            if label_load in label_support_1:
+            if label_load in label_support:
                 return True
         else:
             return False
