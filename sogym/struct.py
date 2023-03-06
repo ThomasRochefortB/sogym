@@ -56,7 +56,9 @@ def generate_problem(nelx=100,nely=50, mode = 'train'):
     if mode == 'train':   # We define the training distribution of boundary conditions that the agent will encounter during training
         volfractions =[
             0.3,
+            0.35,
             0.4,
+            0.45,
             0.5
         ]
         conditions=['A','B','C','A_0','B_0','C_0']
