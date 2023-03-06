@@ -99,26 +99,27 @@ class ImageDictExtractor(BaseFeaturesExtractor):
 
 class CustomBoxDense(BaseFeaturesExtractor):
     class AddGaussianNoise(nn.Module):
-        def __init__(self, mean=0.0, std=1.0,beta_size=9):
+        def __init__(self, mean=0.0, std=1.0,beta_size=9,device='cpu'):
             super().__init__()
             self.mean = mean
             self.std = std
             self.beta_size = beta_size
+            self.device = device
         def forward(self, x):
             if self.training:
-                ones = th.ones(self.beta_size)* self.std + self.mean
-                zeros= th.zeros(x.size()[1]-ones.size()[0])
+                ones = (th.ones(self.beta_size)* self.std + self.mean).to(self.device)
+                zeros= th.zeros(x.size()[1]-ones.size()[0]).to(self.device)
                 #concatenate the two tensors
                 noise = th.cat((ones,zeros),0) 
                 x = x + noise
             return x
-    def __init__(self, observation_space: gym.spaces.Box, hidden_size: int = 32, noise_scale: float = 0.0,):
+    def __init__(self, observation_space: gym.spaces.Box, hidden_size: int = 32, noise_scale: float = 0.0,device='cpu'):
         super().__init__(observation_space, features_dim=hidden_size)
         # We assume CxHxW images (channels first)
         # Re-ordering will be done by pre-preprocessing or wrapper
         self.noise_scale = noise_scale
         input_len = observation_space.shape[0]
-        gaussian_layer = self.AddGaussianNoise(std=self.noise_scale)
+        gaussian_layer = self.AddGaussianNoise(std=self.noise_scale,device=device)
         self.linear = nn.Sequential(
             gaussian_layer,
             nn.Linear(input_len, hidden_size),
