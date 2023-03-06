@@ -116,9 +116,9 @@ class CustomBoxDense(BaseFeaturesExtractor):
         super().__init__(observation_space, features_dim=hidden_size)
         # We assume CxHxW images (channels first)
         # Re-ordering will be done by pre-preprocessing or wrapper
-        
+        self.noise_scale = noise_scale
         input_len = observation_space.shape[0]
-        gaussian_layer = self.AddGaussianNoise(std=noise_scale)
+        gaussian_layer = self.AddGaussianNoise(std=self.noise_scale)
         self.linear = nn.Sequential(
             gaussian_layer,
             nn.Linear(input_len, hidden_size),
