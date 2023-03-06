@@ -92,3 +92,43 @@ class ImageDictExtractor(BaseFeaturesExtractor):
             encoded_tensor_list.append(extractor(observations[key]))
         # Return a (B, self._features_dim) PyTorch tensor, where B is batch dimension.
         return th.cat(encoded_tensor_list, dim=1)
+    
+
+class AddGaussianNoise(nn.Module):
+    def __init__(self, mean=0.0, std=1.0):
+        super().__init__()
+        self.mean = mean
+        self.std = std
+
+    def forward(self, x):
+        if self.training:
+            noise = th.randn(x.size()) * self.std + self.mean
+            x = x + noise
+        return x
+
+
+class CustomBoxDense(BaseFeaturesExtractor):
+
+
+    def __init__(self, observation_space: gym.spaces.Box, hidden_size: int = 32, noise_scale: float = 0.0,):
+        super().__init__(observation_space, features_dim=hidden_size)
+        # We assume CxHxW images (channels first)
+        # Re-ordering will be done by pre-preprocessing or wrapper
+        
+        input_len = observation_space.shape[0]
+        gaussian_layer = AddGaussianNoise(std=noise_scale)
+        self.linear = nn.Sequential(
+            gaussian_layer,
+            nn.Linear(input_len, hidden_size),
+            nn.BatchNorm1d(hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.BatchNorm1d(hidden_size),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+
+
+
+    def forward(self, observations: th.Tensor) -> th.Tensor:
+        return self.linear(observations)
