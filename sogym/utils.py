@@ -107,10 +107,10 @@ class CustomBoxDense(BaseFeaturesExtractor):
             self.device = device
         def forward(self, x):
             if self.training:
-                ones = (th.ones(self.beta_size)* self.std + self.mean).to(self.device)
+                ones = (th.randn(self.beta_size)* self.std + self.mean).to(self.device)
                 zeros= th.zeros(x.size()[1]-ones.size()[0]).to(self.device)
                 #concatenate the two tensors
-                noise = th.cat((ones,zeros),0) 
+                noise = th.cat((ones,zeros),0).to(self.device)
                 x = x + noise
             return x
     def __init__(self, observation_space: gym.spaces.Box, hidden_size: int = 32, noise_scale: float = 0.0,device='cpu'):
