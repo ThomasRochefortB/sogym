@@ -306,3 +306,5 @@ def build_design(variable,DW=2.0,DH=1.0,nelx=100,nely=50):
     den = np.sum(H[eleNodesID.astype('int')],1)/4                                 # elemental density vector (for volume)
 
     return H, Phimax,allPhi, den
+
+
