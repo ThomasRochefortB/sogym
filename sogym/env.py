@@ -8,7 +8,7 @@ import cv2
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,nelx=100,nely=50,DW=2.0,DH=1.0,observation_type = 'dense',mode = 'train',img_format='CHW'):
+    def __init__(self,N_components=8,nelx=100,nely=50,DW=2.0,DH=1.0,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard'):
         self.nelx = nelx
         self.nely = nely
         self.DW = DW
@@ -19,6 +19,7 @@ class sogym(gym.Env):
         self.mode = mode
         self.observation_type = observation_type
         self.img_format = img_format
+        self.vol_constraint_type = vol_constraint_type
         # Agent's actions control the (x,y) coordinates of the two endpoints as well as two thicknesses
         self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
         self.xmax=np.vstack((self.DW, self.DH, self.DW, self.DH, 0.3, 0.3)) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
@@ -167,11 +168,15 @@ class sogym(gym.Env):
             done=True
             self.last_Phi = self.Phi
             self.compliance,self.volume, self.U, self.F=calculate_compliance(self.H,self.conditions,self.DW,self.DH,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
-            
-            if self.volume<= self.out_conditions[6] and self.check_connec(): # The desired volume fraction is respected
-                reward=(1/(self.compliance+1e-8)) # The reward is the inverse of the compliance (AKA the stiffness of the structure)
+
+
+            if self.vol_constraint_type=='hard':  
+                if self.volume<= self.out_conditions[6] and self.check_connec(): # The desired volume fraction is respected
+                    reward=(1/(self.compliance+1e-8)) # The reward is the inverse of the compliance (AKA the stiffness of the structure)
+                else:
+                    reward=0.0
             else:
-                reward=0.0
+                reward=(1/(self.compliance+1e-8)) * (1-(self.volume-self.out_conditions[6])**2) # The reward is the inverse of the compliance (AKA the stiffness of the structure) times a penalty term for the volume fraction
             
         info={}
         if self.observation_type=='dense':
