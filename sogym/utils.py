@@ -113,7 +113,7 @@ class CustomBoxDense(BaseFeaturesExtractor):
                 noise = th.cat((ones,zeros),0).to(self.device)
                 x = x + noise
             return x
-    def __init__(self, observation_space: gym.spaces.Box, hidden_size: int = 32, noise_scale: float = 0.0,device='cpu'):
+    def __init__(self, observation_space: gym.spaces.Box, hidden_size: int = 32, noise_scale: float = 0.0,device='cpu',batch_norm=True):
         super().__init__(observation_space, features_dim=hidden_size)
         # We assume CxHxW images (channels first)
         # Re-ordering will be done by pre-preprocessing or wrapper
@@ -130,6 +130,16 @@ class CustomBoxDense(BaseFeaturesExtractor):
             nn.ReLU(),
             nn.Flatten(),
         )
+
+        if batch_norm == False:
+            self.linear = nn.Sequential(
+                gaussian_layer,
+                nn.Linear(input_len, hidden_size),
+                nn.ReLU(),
+                nn.Linear(hidden_size, hidden_size),
+                nn.ReLU(),
+                nn.Flatten(),
+            )
 
     def forward(self, observations: th.Tensor) -> th.Tensor:
         return self.linear(observations)
