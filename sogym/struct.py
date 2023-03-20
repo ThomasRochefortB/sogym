@@ -130,9 +130,8 @@ def generate_problem(nelx=100,nely=50, mode = 'train'):
                 
     elif mode == 'test': # we define the test distribution of boundary conditions that the agent will encounter during testing to evaluate extrapolation generalization
         volfractions =[
-            0.35,
-            0.45,
-            0.55
+            0.25,
+            0.35
         ]
         conditions=['Y','Y_0','Z','Z_0']
         BC_saved=[]

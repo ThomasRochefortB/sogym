@@ -272,35 +272,11 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
         den = np.sum(H[eleNodesID.astype('int')],1)/4                                 # elemental density vector (for volume)
         U = np.zeros((nDof,1))
         nAct = len(actComp) + nNd                                # number of active components (for load path)
-        #strct,loadPth = srch_ldpth(nAct,allPhiAct,Phimax,epsilon,eleNodesID,loadEle,fixEle)  # load path identification
-        strct=0
-        if strct == 1 :                                                  # load path existed, FEA with DOFs removal 
-            if len(loadPth) == nAct:         # no islands
-                denSld = den 
-            else:                            # isolated components existed
-                PhimaxSld = np.maximum(-1e3,np.log(np.sum(np.exp(lmd*allPhiAct[:,np.int32(loadPth)]),1))/lmd) # global TDF of components in load path
-
-            eleLft = np.setdiff1d(np.arange(len(denSld)), np.where(denSld < alpha + np.spacing(1))[0])    # retained elements for FEA
-            edofMatLft = edofMat[eleLft,:]
-            freedofLft = np.setdiff1d(edofMatLft,fixDof)                    #retained DOFs for FEA
-            iK1,jK1 = np.array(edofMatLft[:,sI.astype('int')]).T,np.array(edofMatLft[:,sII.astype('int')]).T
-            Iar = np.sort(np.vstack((iK1.flatten(order='F'), jK1.flatten(order='F'))).T, axis=1)[:, ::-1]     # new reduced assembly indexing
-            sK = np.multiply(np.reshape(Ke.flatten(order='F'),(Ke.flatten(order='F').shape[0],1)),np.reshape(denSld[eleLft],(denSld[eleLft].shape[0],1)).T)
-            sK = sK.flatten(order='F')
-
-            K = csc_matrix((sK, (Iar[:,0], Iar[:,1])), shape=(nDof, nDof))
-            K = K + K.T - diags((K.diagonal()))
-            K = K + csc_matrix((np.spacing(1)*np.ones(nDof), (np.arange(nDof), np.arange(nDof))), shape=(nDof, nDof))   # regularization of disconnected component
-            U[freedofLft] =spsolve(K[freedofLft,:][:,freedofLft], F[freedofLft]).reshape((len(freedofLft),1))
-
-        else:
-                                                                    # no load path, regular FEA
-            #print('WARNING!!! NO loading path was found!!!')
-            sK = np.multiply(np.reshape(Ke.flatten(order='F'),(Ke.flatten(order='F').shape[0],1)),np.reshape(den,(den.shape[0],1)).T)
-            sK = sK.flatten(order='F')
-            K = csc_matrix((sK.flatten(order='F'), (Iar0[:,0], Iar0[:,1])), shape=(nDof, nDof))
-            K =  K + K.T - diags((K.diagonal()))
-            U[freeDof] =spsolve(K[freeDof,:][:,freeDof], F[freeDof]).reshape((len(freeDof),1))
+        sK = np.multiply(np.reshape(Ke.flatten(order='F'),(Ke.flatten(order='F').shape[0],1)),np.reshape(den,(den.shape[0],1)).T)
+        sK = sK.flatten(order='F')
+        K = csc_matrix((sK.flatten(order='F'), (Iar0[:,0], Iar0[:,1])), shape=(nDof, nDof))
+        K =  K + K.T - diags((K.diagonal()))
+        U[freeDof] =spsolve(K[freeDof,:][:,freeDof], F[freeDof]).reshape((len(freeDof),1))
 
         f0val = F.T*U/scl
         fval = sum(den)*EL*EW/(DW*DH) - volfrac
@@ -326,35 +302,12 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
         den = np.sum(H[eleNodesID.astype('int')],1)/4                                 # elemental density vector (for volume)
         U = np.zeros((nDof,1))
         nAct = len(actComp) + nNd                                # number of active components (for load path)
-        #strct,loadPth = srch_ldpth(nAct,allPhiAct,Phimax,epsilon,eleNodesID,loadEle,fixEle)  # load path identification
-        strct=0
-        if strct == 1 :                                                  # load path existed, FEA with DOFs removal 
-            if len(loadPth) == nAct:         # no islands
-                denSld = den 
-            else:                            # isolated components existed
-                PhimaxSld = np.maximum(-1e3,np.log(np.sum(np.exp(lmd*allPhiAct[:,np.int32(loadPth)]),1))/lmd) # global TDF of components in load path
-
-            eleLft = np.setdiff1d(np.arange(len(denSld)), np.where(denSld < alpha + np.spacing(1))[0])    # retained elements for FEA
-            edofMatLft = edofMat[eleLft,:]
-            freedofLft = np.setdiff1d(edofMatLft,fixDof)                    #retained DOFs for FEA
-            iK1,jK1 = np.array(edofMatLft[:,sI.astype('int')]).T,np.array(edofMatLft[:,sII.astype('int')]).T
-            Iar = np.sort(np.vstack((iK1.flatten(order='F'), jK1.flatten(order='F'))).T, axis=1)[:, ::-1]     # new reduced assembly indexing
-            sK = np.multiply(np.reshape(Ke.flatten(order='F'),(Ke.flatten(order='F').shape[0],1)),np.reshape(denSld[eleLft],(denSld[eleLft].shape[0],1)).T)
-            sK = sK.flatten(order='F')
-
-            K = csc_matrix((sK, (Iar[:,0], Iar[:,1])), shape=(nDof, nDof))
-            K = K + K.T - diags((K.diagonal()))
-            K = K + csc_matrix((np.spacing(1)*np.ones(nDof), (np.arange(nDof), np.arange(nDof))), shape=(nDof, nDof))   # regularization of disconnected component
-            U[freedofLft] =spsolve(K[freedofLft,:][:,freedofLft], F[freedofLft]).reshape((len(freedofLft),1))
-
-        else:
-                                                                    # no load path, regular FEA
-            #print('WARNING!!! NO loading path was found!!!')
-            sK = np.multiply(np.reshape(Ke.flatten(order='F'),(Ke.flatten(order='F').shape[0],1)),np.reshape(den,(den.shape[0],1)).T)
-            sK = sK.flatten(order='F')
-            K = csc_matrix((sK.flatten(order='F'), (Iar0[:,0], Iar0[:,1])), shape=(nDof, nDof))
-            K =  K + K.T - diags((K.diagonal()))
-            U[freeDof] =spsolve(K[freeDof,:][:,freeDof], F[freeDof]).reshape((len(freeDof),1))
+                                                                            # no load path, regular FEA
+        sK = np.multiply(np.reshape(Ke.flatten(order='F'),(Ke.flatten(order='F').shape[0],1)),np.reshape(den,(den.shape[0],1)).T)
+        sK = sK.flatten(order='F')
+        K = csc_matrix((sK.flatten(order='F'), (Iar0[:,0], Iar0[:,1])), shape=(nDof, nDof))
+        K =  K + K.T - diags((K.diagonal()))
+        U[freeDof] =spsolve(K[freeDof,:][:,freeDof], F[freeDof]).reshape((len(freeDof),1))
 
         f0val = F.T*U/scl
         fval = sum(den)*EL*EW/(DW*DH) - volfrac
