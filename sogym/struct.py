@@ -49,10 +49,24 @@ def Heaviside(phi,alpha,epsilon):
     return H
 
 #Function that generates problem conditions (loading, support, volfrac)
-def generate_problem(nelx=100,nely=50, mode = 'train'):
+def generate_problem( mode = 'train'):
     """
     This function generates the problem conditions for the agent to solve
     """
+
+    # dx and dy will be sampled from a uniform distribution between 1.0 and 2.0. The number will only have one digit (ex: 1.1,1.2, ...)
+    dx = np.round(np.random.uniform(1.0,2.0),1)
+    dy = np.round(np.random.uniform(1.0,2.0),1)
+
+    # The resolution of the mesh will implement a fixed element size of 0.01 (100 elements per 1.0 unit)
+    nelx = 100 * dx
+    nely = 100 * dy
+
+    # Orientation will be sampled from a uniform distribution between 0 and 360 degrees with increments of 15 degrees::
+    load_orientation = np.random.choice([0,15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240,255,270,285,300,315,330,345])
+    magnitude_x=np.array([np.cos(np.radians(load_orientation))])
+    magnitude_y=np.array([np.sin(np.radians(load_orientation))])     
+
     if mode == 'train':   # We define the training distribution of boundary conditions that the agent will encounter during training
         volfractions =[
             0.3,
@@ -71,32 +85,27 @@ def generate_problem(nelx=100,nely=50, mode = 'train'):
                 if cond == 'A': 
                     fixed_nodes[0,0:nelx//2]=1
                     load_nodes[:,-1]=1
-                    direct=[45,90,225,270]
 
                 if cond == 'B':
                     fixed_nodes[-1,0:nelx//2]=1
                     load_nodes[:,-1]=1
-                    direct=[90,135,270,305]
 
                 if cond == 'C':
                     fixed_nodes[:,0]=1
                     load_nodes[:,-1]=1
-                    direct=[45,90,135,225,270,305]
 
                 if cond =='A_0':
                     fixed_nodes[0,nelx//2+1:-1]=1
                     load_nodes[:,0]=1
-                    direct=[90,135,270,305]
 
                 if cond =='B_0':
                     fixed_nodes[-1,nelx//2+1:-1]=1
                     load_nodes[:,0]=1
-                    direct=[45,90,225,270]
 
                 if cond =='C_0':
                     fixed_nodes[:,-1]=1
                     load_nodes[:,0]=1
-                    direct=[45,90,135,225,270,305]
+
                 for angle in direct:
                     #generate the fixeddofs:
                     fixednode=np.argwhere(fixed_nodes.reshape((((nely+1))*((nelx+1))),order='F')==1)
@@ -111,8 +120,7 @@ def generate_problem(nelx=100,nely=50, mode = 'train'):
                         loaddof_x=[2*loadnode]
                         loaddof_y=[(2*loadnode)+1]
 
-                        magnitude_x=np.array([np.cos(np.radians(angle))])
-                        magnitude_y=np.array([np.sin(np.radians(angle))])        
+                           
 
                         data_save={
                             'fixeddofs':fixeddofs,
@@ -143,22 +151,19 @@ def generate_problem(nelx=100,nely=50, mode = 'train'):
                 if cond == 'Y': 
                     fixed_nodes[0,nelx//4:-nelx//4]=1
                     load_nodes[-1,:]=1
-                    direct=[0,180]
 
                 if cond == 'Y_0':
                     fixed_nodes[-1,nelx//4:-nelx//4]=1
                     load_nodes[0,:]=1
-                    direct=[0,180]
 
                 if cond == 'Z':
                     fixed_nodes[nely//2:nely,0]=1
                     load_nodes[0,nelx//2:-1]=1
-                    direct=[90,135,270,305]
 
                 if cond =='Z_0':
                     fixed_nodes[nely//2:nely,-1]=1
                     load_nodes[0,0:nelx//2]=1
-                    direct=[90,135,270,305]
+
                 for angle in direct:
                     #generate the fixeddofs:
                     fixednode=np.argwhere(fixed_nodes.reshape((((nely+1))*((nelx+1))),order='F')==1)
@@ -173,9 +178,7 @@ def generate_problem(nelx=100,nely=50, mode = 'train'):
                         loaddof_x=[2*loadnode]
                         loaddof_y=[(2*loadnode)+1]
 
-                        magnitude_x=np.array([np.cos(np.radians(angle))])
-                        magnitude_y=np.array([np.sin(np.radians(angle))])        
-
+                     
                         data_save={
                             'fixeddofs':fixeddofs,
                             'loaddof_x':loaddof_x,

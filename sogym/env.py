@@ -3,31 +3,21 @@ from sogym.struct import *
 import numpy as np
 import random
 import matplotlib.pyplot as plt
+from sogym.rand_bc import gen_randombc
 import cv2
 
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,nelx=100,nely=50,DW=2.0,DH=1.0,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard'):
-        self.nelx = nelx
-        self.nely = nely
-        self.DW = DW
-        self.DH = DH
-        self.EW=self.DW / self.nelx # length of element
-        self.EH=self.DH / self.nely # width of element
+    def __init__(self,N_components=8,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard'):
+     
         self.N_components = N_components
         self.mode = mode
         self.observation_type = observation_type
         self.img_format = img_format
         self.vol_constraint_type = vol_constraint_type
-        # Agent's actions control the (x,y) coordinates of the two endpoints as well as two thicknesses
-        self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
-        self.xmax=np.vstack((self.DW, self.DH, self.DW, self.DH, 0.3, 0.3)) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
-        self.N_actions = 6
-        
-        self.BC_dict=generate_problem(nelx,nely,mode)
-        self.x,self.y=np.meshgrid(np.linspace(0, self.DW,self.nelx+1),np.linspace(0,self.DH,self.nely+1))                # coordinates of nodal points
-        
+       
+        self.N_actions = 6        
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
 
@@ -66,9 +56,16 @@ class sogym(gym.Env):
             raise ValueError('Invalid observation space type. Only "dense", "box_dense" and "image" are supported.')
 
     def reset(self):
-        self.random_int = random.randint(0,len(self.BC_dict)-1)
+        self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc()
+        self.EW=self.dx / self.nelx # length of element
+        self.EH=self.dy/ self.nely # width of element     
+        self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
+        self.xmax=np.vstack((self.dx, self.dy, self.dx, self.dy, 0.2, 0.2)) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
+        self.x,self.y=np.meshgrid(np.linspace(0, self.dx,self.nelx+1),np.linspace(0,self.dy,self.nely+1))                # coordinates of nodal points
+
         self.variables_plot=[]
-        self.conditions=self.BC_dict[self.random_int]
+
+
         load_mat_print=np.zeros(((self.nely+1)*(self.nelx+1),1))
         load_mat_print[self.conditions['fixednode']]=1
         load_mat_print[self.conditions['loadnode'],0]=2
@@ -145,7 +142,7 @@ class sogym(gym.Env):
         self.variables_plot.append(formatted_variables)
 
         # We build the topology with the new design variables:
-        self.H, self.Phimax,self.Phi, den=build_design(np.array(self.variables_plot).T, self.DW,self.DH, self.nelx,self.nely)    # self.H is the Heaviside projection of the design variables and self.Phi are the design surfaces.
+        self.H, self.Phimax,self.Phi, den=build_design(np.array(self.variables_plot).T, self.dx,self.dy, self.nelx,self.nely)    # self.H is the Heaviside projection of the design variables and self.Phi are the design surfaces.
         self.proj_img=self.H.reshape((1,self.nely+1,self.nelx+1),order='F')
         
         nEle = self.nelx*self.nely
@@ -156,7 +153,7 @@ class sogym(gym.Env):
         eleNodesID = edofMat[:,0:8:2]/2   
         #FEA
         self.den=np.sum(self.H[eleNodesID.astype('int')],1)/4 
-        self.volume=sum(self.den)*self.EW*self.EH/(self.DW*self.DH)
+        self.volume=sum(self.den)*self.EW*self.EH/(self.dx*self.dy)
         
 
         # The reward function is the sparse reward given only at the end of the episode if the desired volume fraction is respected.
@@ -167,7 +164,7 @@ class sogym(gym.Env):
         else: # We are at the end of the episode
             done=True
             self.last_Phi = self.Phi
-            self.compliance,self.volume, self.U, self.F=calculate_compliance(self.H,self.conditions,self.DW,self.DH,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
+            self.compliance,self.volume, self.U, self.F=calculate_compliance(self.H,self.conditions,self.dx,self.dy,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
 
 
             if self.vol_constraint_type=='hard':  
