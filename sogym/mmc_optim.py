@@ -400,4 +400,5 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component'):   ## Probably need to
         print(fval/volfrac)
         print("Volume fraction: ",fval," Desired: ",volfrac)
         loop+=1
+    return xval, f0val,loop+totalinner_it
 
