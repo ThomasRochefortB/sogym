@@ -367,29 +367,29 @@ class sogym(gym.Env):
         #magnitude of load in y 
 
         if self.conditions['selected_boundary']==0.0:  # Left boundary
-            label_support = labels[int(self.conditions['boundary_position']*self.nely):int(self.conditions['boundary_position']*self.nely)+int(self.conditions['boundary_length']),0]
+            label_support = labels[int(self.conditions['boundary_position']*self.nely):int(self.conditions['boundary_position']*self.nely)+int(self.conditions['boundary_length']*self.nely),0]
             labels_load=[]
             for i in range(self.conditions['n_loads']):
             #labels of load:
-                labels_load .append(labels[int(self.conditions['load_position'][i]),-1])
+                labels_load .append(labels[int(self.conditions['load_position'][i]*self.nely),-1])
         elif self.conditions['selected_boundary']==0.25: # Right boundary
-            label_support = labels[int(self.conditions['boundary_position']*self.nely):int(self.conditions['boundary_position']*self.nely)+int(self.conditions['boundary_length']),-1]
+            label_support = labels[int(self.conditions['boundary_position']*self.nely):int(self.conditions['boundary_position']*self.nely)+int(self.conditions['boundary_length']*self.nely),-1]
             labels_load=[]
             for i in range(self.conditions['n_loads']):
             #labels of load:
-                labels_load .append(labels[int(self.conditions['load_position'][i]),0])
+                labels_load .append(labels[int(self.conditions['load_position'][i]*self.nely),0])
         elif self.conditions['selected_boundary']==0.5: # Bottom boundary
-            label_support = labels[-1,int(self.conditions['boundary_position']*self.nelx):int(self.conditions['boundary_position']*self.nelx)+int(self.conditions['boundary_length'])]
+            label_support = labels[-1,int(self.conditions['boundary_position']*self.nelx):int(self.conditions['boundary_position']*self.nelx)+int(self.conditions['boundary_length']*self.nelx)]
             labels_load=[]
             for i in range(self.conditions['n_loads']):
             #labels of load:
-                labels_load .append(labels[0,int(self.conditions['load_position'][i])])
+                labels_load .append(labels[0,int(self.conditions['load_position'][i]*self.nelx)])
         elif self.conditions['selected_boundary']==0.75: # Top boundary
-            label_support = labels[0,int(self.conditions['boundary_position']*self.nelx):int(self.conditions['boundary_position']*self.nelx)+int(self.conditions['boundary_length'])]
+            label_support = labels[0,int(self.conditions['boundary_position']*self.nelx):int(self.conditions['boundary_position']*self.nelx)+int(self.conditions['boundary_length']*self.nelx)]
             labels_load=[]
             for i in range(self.conditions['n_loads']):
             #labels of load:
-                labels_load .append(labels[-1,int(self.conditions['load_position'][i])])
+                labels_load .append(labels[-1,int(self.conditions['load_position'][i]*self.nelx)])
 
         for load in labels_load:
              if load!=0:

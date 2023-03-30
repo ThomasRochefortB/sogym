@@ -62,9 +62,9 @@ def gen_randombc():
 
 
     # Generate n_loads random position for each load and ensure they are different:
-    load_position = np.round(np.random.uniform(0, 1,size=n_loads),2)
+    load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)
     while len(np.unique(load_position)) != n_loads:
-        load_position = np.round(np.random.uniform(0, 1,size=n_loads),2)
+        load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)
 
         
     if selected_type == 'fully':
