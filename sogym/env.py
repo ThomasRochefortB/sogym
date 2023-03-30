@@ -38,7 +38,7 @@ class sogym(gym.Env):
                                         )
         
         elif self.observation_type =='box_dense':
-                                         self.observation_space = gym.spaces.Box(low=-np.pi, high=np.pi, shape=(9+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
+                                         self.observation_space = gym.spaces.Box(low=-np.pi, high=np.pi, shape=(25+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
 
 
         elif self.observation_type =='image':
@@ -46,7 +46,7 @@ class sogym(gym.Env):
             self.observation_space = gym.spaces.Dict(
                                         spaces={
                                             "image": gym.spaces.Box(0, 255, img_shape,dtype=np.uint8), # Image of the current design
-                                            "beta": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "beta": gym.spaces.Box(-1, 1, (25,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
                                             "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
@@ -161,6 +161,7 @@ class sogym(gym.Env):
         else: # We are at the end of the episode
             done=True
             self.last_Phi = self.Phi
+            self.last_conditions,self.last_nelx, self.last_nely ,self.last_x, self.last_y ,self.last_dx, self.last_dy = self.conditions, self.nelx, self.nely, self.x, self.y, self.dx, self.dy
             self.compliance,self.volume, self.U, self.F=calculate_compliance(self.H,self.conditions,self.dx,self.dy,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
 
 
@@ -170,8 +171,10 @@ class sogym(gym.Env):
                 else:
                     reward=0.0
             else:
-                reward=(1/(self.compliance+1e-8)) * (1-(self.volume-self.out_conditions['volfrac'])**2) # The reward is the inverse of the compliance (AKA the stiffness of the structure) times a penalty term for the volume fraction
-            
+                if self.check_connec():
+                    reward=(1/(self.compliance+1e-8)) * (1-(self.volume-self.conditions['volfrac'])**2) # The reward is the inverse of the compliance (AKA the stiffness of the structure) times a penalty term for the volume fraction
+                else:
+                    reward=0.0
         info={}
         if self.observation_type=='dense':
             self.observation = {"beta":np.float32(self.beta),
@@ -202,61 +205,76 @@ class sogym(gym.Env):
     
 
     def plot(self, mode='human',test=None, train_viz=True):
-        plt.rcParams["figure.figsize"] = (5*self.dx,5*self.dy)        
-       
-
+        #plt.rcParams["figure.figsize"] = (5*self.dx,5*self.dy)        
+        plt.rcParams["figure.figsize"] = (10,10)        
+        if train_viz:
+            dx = self.last_dx
+            dy = self.last_dy
+            nelx = self.last_nelx
+            nely = self.last_nely
+            x = self.last_x
+            y = self.last_y
+            condition_dict = self.last_conditions
+        else:
+            dx = self.dx
+            dy = self.dy
+            nelx = self.nelx
+            nely = self.nely
+            x = self.x
+            y = self.y
+            condition_dict = self.conditions
 
         fig = plt.figure()
         ax = plt.subplot(111)
         if train_viz:
             for i, color in zip(range(0,self.last_Phi.shape[1]), self.render_colors):
-                ax.contourf(self.x,self.y,np.flipud(self.last_Phi[:,i].reshape((self.nely+1,self.nelx+1),order='F')),[0,1],colors=color)
+                ax.contourf(x,y,np.flipud(self.last_Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
         else:
             for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
-                ax.contourf(self.x,self.y,np.flipud(self.Phi[:,i].reshape((self.nely+1,self.nelx+1),order='F')),[0,1],colors=color)
+                ax.contourf(x,y,np.flipud(self.Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
         
                     # Add a rectangle to show the domain boundary:
-        ax.add_patch(plt.Rectangle((0,0),self.dx, self.dy,
+        ax.add_patch(plt.Rectangle((0,0),dx, dy,
                                     clip_on=False,linewidth = 1,fill=False))
         
-        if self.conditions['selected_boundary']==0.0:  # Left boundary
+        if condition_dict['selected_boundary']==0.0:  # Left boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (0.0,self.dy*(1.0-self.conditions['boundary_position']-self.conditions['boundary_length'])),
-                                    width = self.conditions['boundary_length']*self.dy, 
+            ax.add_patch(plt.Rectangle(xy = (0.0,dy*(1.0-condition_dict['boundary_position']-condition_dict['boundary_length'])),
+                                    width = condition_dict['boundary_length']*dy, 
                                     height = 0.1,
                                     angle = 90,
                                     hatch='/',
                                         clip_on=False,
                                         linewidth = 0))
 
-            for i in range(self.conditions['n_loads']):
-                ax.arrow(self.dx-(self.conditions['magnitude_x'][i]*0.2),self.dy*(1-self.conditions['load_position'][i]),
-                            dx= self.conditions['magnitude_x'][i]*0.2,
-                            dy = self.conditions['magnitude_y'][i]*0.2,
+            for i in range(condition_dict['n_loads']):
+                ax.arrow(dx-(condition_dict['magnitude_x'][i]*0.2),dy*(1-condition_dict['load_position'][i]),
+                            dx= condition_dict['magnitude_x'][i]*0.2,
+                            dy = condition_dict['magnitude_y'][i]*0.2,
                             width=0.2/8,
                             length_includes_head=True,
                             head_starts_at_zero=False)
                 
-        elif self.conditions['selected_boundary']==0.25: # Right boundary
+        elif condition_dict['selected_boundary']==0.25: # Right boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (self.dx+0.1,self.dy*(1.0-self.conditions['boundary_position']-self.conditions['boundary_length'])),
-                                    width = self.conditions['boundary_length']*self.dy, 
+            ax.add_patch(plt.Rectangle(xy = (dx+0.1,dy*(1.0-condition_dict['boundary_position']-condition_dict['boundary_length'])),
+                                    width = condition_dict['boundary_length']*dy, 
                                     height = 0.1,
                                     angle = 90,
                                     hatch='/',
                                         clip_on=False,
                                         linewidth = 0))
 
-            for i in range(self.conditions['n_loads']):
-                ax.arrow(0.0-(self.conditions['magnitude_x'][i]*0.2),self.dy*(1-self.conditions['load_position'][i])-self.conditions['magnitude_y'][i]*0.2,
-                            dx= self.conditions['magnitude_x'][i]*0.2,
-                            dy = self.conditions['magnitude_y'][i]*0.2,
+            for i in range(condition_dict['n_loads']):
+                ax.arrow(0.0-(condition_dict['magnitude_x'][i]*0.2),dy*(1-condition_dict['load_position'][i])-condition_dict['magnitude_y'][i]*0.2,
+                            dx= condition_dict['magnitude_x'][i]*0.2,
+                            dy = condition_dict['magnitude_y'][i]*0.2,
                             width=0.2/8,
                             length_includes_head=True,
                             head_starts_at_zero=False)
-        elif self.conditions['selected_boundary']==0.5: # Bottom boundary
+        elif condition_dict['selected_boundary']==0.5: # Bottom boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (self.dx*self.conditions['boundary_position'],-0.1),
+            ax.add_patch(plt.Rectangle(xy = (dx*self.conditions['boundary_position'],-0.1),
                                     width = self.conditions['boundary_length']*self.dx, 
                                     height = 0.1,
                                     angle = 0.0,
@@ -264,28 +282,28 @@ class sogym(gym.Env):
                                         clip_on=False,
                                         linewidth = 0))
 
-            for i in range(self.conditions['n_loads']):
-                ax.arrow(self.dx*(self.conditions['load_position'][i])-self.conditions['magnitude_x'][i]*0.2,self.dy-(self.conditions['magnitude_y'][i]*0.2),
-                            dx= self.conditions['magnitude_x'][i]*0.2,
-                            dy = self.conditions['magnitude_y'][i]*0.2,
+            for i in range(condition_dict['n_loads']):
+                ax.arrow(dx*(condition_dict['load_position'][i])-condition_dict['magnitude_x'][i]*0.2,dy-(condition_dict['magnitude_y'][i]*0.2),
+                            dx= condition_dict['magnitude_x'][i]*0.2,
+                            dy = condition_dict['magnitude_y'][i]*0.2,
                             width=0.2/8,
                             length_includes_head=True,
                             head_starts_at_zero=False)
                 
-        elif self.conditions['selected_boundary']==0.75: # Top boundary
+        elif condition_dict['selected_boundary']==0.75: # Top boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (self.dx*self.conditions['boundary_position'],self.dy),
-                                    width = self.conditions['boundary_length']*self.dx, 
+            ax.add_patch(plt.Rectangle(xy = (dx*condition_dict['boundary_position'],dy),
+                                    width = condition_dict['boundary_length']*dx, 
                                     height = 0.1,
                                     angle = 0.0,
                                     hatch='/',
                                         clip_on=False,
                                         linewidth = 0))
 
-            for i in range(self.conditions['n_loads']):
-                ax.arrow(self.dx*(self.conditions['load_position'][i])-self.conditions['magnitude_x'][i]*0.2,0.0-(self.conditions['magnitude_y'][i]*0.2),
-                            dx= self.conditions['magnitude_x'][i]*0.2,
-                            dy = self.conditions['magnitude_y'][i]*0.2,
+            for i in range(condition_dict['n_loads']):
+                ax.arrow(dx*(condition_dict['load_position'][i])-condition_dict['magnitude_x'][i]*0.2,0.0-(condition_dict['magnitude_y'][i]*0.2),
+                            dx= condition_dict['magnitude_x'][i]*0.2,
+                            dy = condition_dict['magnitude_y'][i]*0.2,
                             width=0.2/8,
                             length_includes_head=True,
                             head_starts_at_zero=False)
@@ -319,7 +337,7 @@ class sogym(gym.Env):
         return res
 
     def check_connec(self):
-
+        connec=[]
         # Load grayscale image
         img = (self.den.reshape((self.nely,self.nelx),order='F'))
         # Threshold the image to create a binary image with dark pixels as 1s and light pixels as 0s
@@ -347,25 +365,38 @@ class sogym(gym.Env):
         #Volume fraction (between 0 and 1)
         #magnitude of load in x 
         #magnitude of load in y 
-        y_load = int(self.out_conditions[0]*(self.nely))
-        x_load = int(self.out_conditions[1]*(self.nelx))
-        y_support_1 = int(self.out_conditions[2]*(self.nely))
-        x_support_1 = int(self.out_conditions[3]*(self.nelx))
-        y_support_2 = int(self.out_conditions[4]*(self.nely))
-        x_support_2 = int(self.out_conditions[5]*(self.nelx))
 
-        #labels of support_1 and support_2
-        if x_support_1 == x_support_2:
-            label_support = labels[y_support_1:y_support_2,x_support_1]
-        elif y_support_1==y_support_2:
-            label_support = labels[y_support_1,x_support_1:x_support_2]
-        else:
-            raise ValueError("Supports must be on the same line")
-        #labels of load:
-        label_load = labels[y_load,x_load]
-        
-        if label_load !=0:
-            if label_load in label_support:
-                return True
-        else:
-            return False
+        if self.conditions['selected_boundary']==0.0:  # Left boundary
+            label_support = labels[int(self.conditions['boundary_position']*self.nely):int(self.conditions['boundary_position']*self.nely)+int(self.conditions['boundary_length']),0]
+            labels_load=[]
+            for i in range(self.conditions['n_loads']):
+            #labels of load:
+                labels_load .append(labels[int(self.conditions['load_position'][i]),-1])
+        elif self.conditions['selected_boundary']==0.25: # Right boundary
+            label_support = labels[int(self.conditions['boundary_position']*self.nely):int(self.conditions['boundary_position']*self.nely)+int(self.conditions['boundary_length']),-1]
+            labels_load=[]
+            for i in range(self.conditions['n_loads']):
+            #labels of load:
+                labels_load .append(labels[int(self.conditions['load_position'][i]),0])
+        elif self.conditions['selected_boundary']==0.5: # Bottom boundary
+            label_support = labels[-1,int(self.conditions['boundary_position']*self.nelx):int(self.conditions['boundary_position']*self.nelx)+int(self.conditions['boundary_length'])]
+            labels_load=[]
+            for i in range(self.conditions['n_loads']):
+            #labels of load:
+                labels_load .append(labels[0,int(self.conditions['load_position'][i])])
+        elif self.conditions['selected_boundary']==0.75: # Top boundary
+            label_support = labels[0,int(self.conditions['boundary_position']*self.nelx):int(self.conditions['boundary_position']*self.nelx)+int(self.conditions['boundary_length'])]
+            labels_load=[]
+            for i in range(self.conditions['n_loads']):
+            #labels of load:
+                labels_load .append(labels[-1,int(self.conditions['load_position'][i])])
+
+        for load in labels_load:
+             if load!=0:
+                  if load in label_support:
+                    connec.append(True)
+                  else:
+                    connec.append(False)
+        # return True if connec is not empty and if all its elements are True
+        return bool(connec) and all(connec)
+    
