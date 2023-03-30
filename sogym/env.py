@@ -172,7 +172,7 @@ class sogym(gym.Env):
                     reward=0.0
             else:
                 if self.check_connec():
-                    reward=(1/(self.compliance+1e-8)) * (1-(self.volume-self.conditions['volfrac'])**2) # The reward is the inverse of the compliance (AKA the stiffness of the structure) times a penalty term for the volume fraction
+                    reward=(1/(self.compliance+1e-8)) * (1-abs(self.volume-self.conditions['volfrac']))**6 # The reward is the inverse of the compliance (AKA the stiffness of the structure) times a penalty term for the volume fraction
                 else:
                     reward=0.0
         info={}
