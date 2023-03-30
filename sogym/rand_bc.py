@@ -61,8 +61,12 @@ def gen_randombc():
                 fixeddofs.append((2*fixednode[i])+1)
 
 
-    # Generate a random position for each load:
+    # Generate n_loads random position for each load and ensure they are different:
     load_position = np.round(np.random.uniform(0, 1,size=n_loads),2)
+    while len(np.unique(load_position)) != n_loads:
+        load_position = np.round(np.random.uniform(0, 1,size=n_loads),2)
+
+        
     if selected_type == 'fully':
         # Select a random orientation for the load:
         load_orientation = np.random.choice([0,15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240,255,270,285,300,315,330,345],size=n_loads)
