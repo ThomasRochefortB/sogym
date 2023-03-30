@@ -62,6 +62,7 @@ def gen_randombc():
 
 
     # Generate n_loads random position for each load and ensure they are different:
+    # I also need to ensure a minimum distance of 0.05 between loads
     load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)
     while len(np.unique(load_position)) != n_loads:
         while np.min(np.abs(np.diff(load_position))) < 0.05:
