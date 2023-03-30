@@ -30,7 +30,7 @@ class sogym(gym.Env):
         if self.observation_type =='dense':
             self.observation_space = gym.spaces.Dict(
                                         spaces={
-                                            "beta": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "beta": gym.spaces.Box(-1, 1, (25,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
                                             "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
@@ -84,7 +84,6 @@ class sogym(gym.Env):
             load_vector[3,i]=self.conditions['magnitude_y'][i]
 
         volfrac_vector = self.conditions['volfrac']
-
         # Let's concatenate everything into a single vector 'beta':
         self.beta = np.concatenate((support_vector.flatten(order='F'),load_vector.flatten(order='F'),volfrac_vector),axis=None) # The new beta vector is a 25 x 1 vector
 
@@ -142,9 +141,7 @@ class sogym(gym.Env):
         self.variables_plot.append(formatted_variables)
 
         # We build the topology with the new design variables:
-        self.H, self.Phimax,self.Phi, den=build_design(np.array(self.variables_plot).T, self.dx,self.dy, self.nelx,self.nely)    # self.H is the Heaviside projection of the design variables and self.Phi are the design surfaces.
-        self.proj_img=self.H.reshape((1,self.nely+1,self.nelx+1),order='F')
-        
+        self.H, self.Phimax,self.Phi, den=build_design(np.array(self.variables_plot).T, self.dx,self.dy, self.nelx,self.nely)    # self.H is the Heaviside projection of the design variables and self.Phi are the design surfaces.        
         nEle = self.nelx*self.nely
         nNod=(self.nelx+1)*(self.nely+1)
         nodMat = np.reshape(np.array(range(0,nNod)),(1+self.nely,1+self.nelx),order='F')                    # maxtrix of nodes numbers (int32)
@@ -205,47 +202,8 @@ class sogym(gym.Env):
     
 
     def plot(self, mode='human',test=None, train_viz=True):
-        plt.rcParams["figure.figsize"] = (5*self.dx,5*self.dy)
-        X=self.plot_conditions
-        
-        if test is not None:
-            X=test
-            
-        load_A1=X[0]*1
-        load_A2=X[1]*2
-        fixed_A1=X[2]
-        fixed_A2=X[3]*2
-        fixed_B1=X[4]
-        fixed_B2=X[5]*2
-        magx=X[7]
-        magy=X[8]
-
-        patch_x=fixed_A2
-        patch_y=1-fixed_A1
-
-        if fixed_A2==fixed_B2: #X coordinate
-            if patch_x<0.1:
-                patch_width=-0.1
-            else:
-                patch_width=0.1
-        else:
-            patch_width=fixed_B2-fixed_A2
-
-        if fixed_A1==fixed_B1:# Y coordinate
-
-            if patch_y<0.1:
-                patch_height=-0.1
-            else:
-                patch_height=0.1
-
-        else:
-            patch_height=fixed_A1-fixed_B1
-
-        if patch_height<-0.5:
-            patch_height=-1
-
-        if patch_width>0.5:
-            patch_width=1
+        plt.rcParams["figure.figsize"] = (5*self.dx,5*self.dy)        
+       
 
 
         fig = plt.figure()
@@ -257,19 +215,81 @@ class sogym(gym.Env):
             for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
                 ax.contourf(self.x,self.y,np.flipud(self.Phi[:,i].reshape((self.nely+1,self.nelx+1),order='F')),[0,1],colors=color)
         
-        ax.add_patch(plt.Rectangle((patch_x+0.01,patch_y),patch_width, patch_height,hatch='/',
-                                      clip_on=False,linewidth = 0))
+                    # Add a rectangle to show the domain boundary:
+        ax.add_patch(plt.Rectangle((0,0),self.dx, self.dy,
+                                    clip_on=False,linewidth = 1,fill=False))
+        
+        if self.conditions['selected_boundary']==0.0:  # Left boundary
+            # Add a blue rectangle to show the support 
+            ax.add_patch(plt.Rectangle(xy = (0.0,self.dy*(1.0-self.conditions['boundary_position']-self.conditions['boundary_length'])),
+                                    width = self.conditions['boundary_length']*self.dy, 
+                                    height = 0.1,
+                                    angle = 90,
+                                    hatch='/',
+                                        clip_on=False,
+                                        linewidth = 0))
 
-        ax.add_patch(plt.Rectangle((0,0),2.0, 1.0,
-                                      clip_on=False,linewidth = 1,fill=False))
+            for i in range(self.conditions['n_loads']):
+                ax.arrow(self.dx-(self.conditions['magnitude_x'][i]*0.2),self.dy*(1-self.conditions['load_position'][i]),
+                            dx= self.conditions['magnitude_x'][i]*0.2,
+                            dy = self.conditions['magnitude_y'][i]*0.2,
+                            width=0.2/8,
+                            length_includes_head=True,
+                            head_starts_at_zero=False)
+                
+        elif self.conditions['selected_boundary']==0.25: # Right boundary
+            # Add a blue rectangle to show the support 
+            ax.add_patch(plt.Rectangle(xy = (self.dx+0.1,self.dy*(1.0-self.conditions['boundary_position']-self.conditions['boundary_length'])),
+                                    width = self.conditions['boundary_length']*self.dy, 
+                                    height = 0.1,
+                                    angle = 90,
+                                    hatch='/',
+                                        clip_on=False,
+                                        linewidth = 0))
 
-        factor=0.2
-        ax.arrow(load_A2-(magx*factor),(1-load_A1-(magy*factor)),
-                      magx*factor,
-                      magy*factor,
-                      width=factor/8,
-                      length_includes_head=True,
-                     head_starts_at_zero=False)
+            for i in range(self.conditions['n_loads']):
+                ax.arrow(0.0-(self.conditions['magnitude_x'][i]*0.2),self.dy*(1-self.conditions['load_position'][i])-self.conditions['magnitude_y'][i]*0.2,
+                            dx= self.conditions['magnitude_x'][i]*0.2,
+                            dy = self.conditions['magnitude_y'][i]*0.2,
+                            width=0.2/8,
+                            length_includes_head=True,
+                            head_starts_at_zero=False)
+        elif self.conditions['selected_boundary']==0.5: # Bottom boundary
+            # Add a blue rectangle to show the support 
+            ax.add_patch(plt.Rectangle(xy = (self.dx*self.conditions['boundary_position'],-0.1),
+                                    width = self.conditions['boundary_length']*self.dx, 
+                                    height = 0.1,
+                                    angle = 0.0,
+                                    hatch='/',
+                                        clip_on=False,
+                                        linewidth = 0))
+
+            for i in range(self.conditions['n_loads']):
+                ax.arrow(self.dx*(self.conditions['load_position'][i])-self.conditions['magnitude_x'][i]*0.2,self.dy-(self.conditions['magnitude_y'][i]*0.2),
+                            dx= self.conditions['magnitude_x'][i]*0.2,
+                            dy = self.conditions['magnitude_y'][i]*0.2,
+                            width=0.2/8,
+                            length_includes_head=True,
+                            head_starts_at_zero=False)
+                
+        elif self.conditions['selected_boundary']==0.75: # Top boundary
+            # Add a blue rectangle to show the support 
+            ax.add_patch(plt.Rectangle(xy = (self.dx*self.conditions['boundary_position'],self.dy),
+                                    width = self.conditions['boundary_length']*self.dx, 
+                                    height = 0.1,
+                                    angle = 0.0,
+                                    hatch='/',
+                                        clip_on=False,
+                                        linewidth = 0))
+
+            for i in range(self.conditions['n_loads']):
+                ax.arrow(self.dx*(self.conditions['load_position'][i])-self.conditions['magnitude_x'][i]*0.2,0.0-(self.conditions['magnitude_y'][i]*0.2),
+                            dx= self.conditions['magnitude_x'][i]*0.2,
+                            dy = self.conditions['magnitude_y'][i]*0.2,
+                            width=0.2/8,
+                            length_includes_head=True,
+                            head_starts_at_zero=False)
+
         ax.set_axis_off()
 
         plt.close()

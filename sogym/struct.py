@@ -204,7 +204,6 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
     """"
     This function takes the heaviside projection and the boundary conditions and calculates the compliance plus volume
     """
-   
      # Material properties
     h=1 #thickness
     E=1
@@ -214,8 +213,8 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
     EW=DW / nelx # length of element
     EH=DH / nely # width of element
     fixDof=conditions['fixeddofs']
-    loaddof_x=conditions['loaddof_x'][0]
-    loaddof_y=conditions['loaddof_y'][0]
+    loaddof_x=conditions['loaddof_x']
+    loaddof_y=conditions['loaddof_y']
     magnitude_x=conditions['magnitude_x']  
     magnitude_y=conditions['magnitude_y']
     
@@ -241,20 +240,10 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
     iK,jK = edofMat[:,np.int32(sI)].T,edofMat[:,np.int32(sII)].T
     Iar0 = np.fliplr(np.sort(np.array([iK.flatten(order='F'),jK[:].flatten(order='F')]).T,axis=1) )        # reduced assembly indexing
     
-    fixEle=[]
-    for i in range(0,len(fixDof)):
-        fixEle.append(np.argwhere(edofMat==fixDof[i])[0][0])                              # elements related to fixed nodes
-    fixEle=np.unique(fixEle)
     freeDof = np.setdiff1d(np.arange(nDof),fixDof)         # index of free dofs
-
-    loadEle=np.array([
-        np.argwhere(edofMat==loaddof_x)[0][0],
-        np.argwhere(edofMat==loaddof_y)[0][0]
-    ])
-
-    loadEle=np.unique(loadEle)
-    F_x=csc_matrix(([magnitude_x[0]], ([loaddof_x[0]], [0])), shape=(nDof, 1))
-    F_y=csc_matrix(([magnitude_y[0]], ([loaddof_y[0]], [0])), shape=(nDof, 1))
+    
+    F_x=csc_matrix((magnitude_x, (loaddof_x, np.zeros_like(loaddof_x))), shape=(nDof, 1))
+    F_y=csc_matrix((magnitude_y, (loaddof_y, np.zeros_like(loaddof_y))), shape=(nDof, 1))
     F=F_x+F_y
     
     
