@@ -9,45 +9,6 @@ from scipy.sparse.linalg import spsolve
 from sogym.mma import mmasub,gcmmasub,asymp,concheck,raaupdate
 from sogym.struct import Ke_tril, Heaviside
 
-
-#Loading path identification
-def srch_ldpth(nAct,allPhiAct,Phimax,epsilon,eleNodesID,loadEle,fixEle):
-    strct = 0
-    fixSet = np.array([])
-    loadPth = np.array([])
-    Frnt = np.array([])
-    # initialization
-    Hmax = Heaviside(Phimax,0,epsilon)
-    denmax = np.sum(Hmax[eleNodesID.astype('int')], 1)/4
-    allH = Heaviside(allPhiAct,0,epsilon)
-    allden = np.matlib.repmat(denmax.reshape((denmax.shape[0],1)),1,nAct)
-    for i in range(0,nAct):  
-        tempH = allH[:,i]
-        allden[:,i] = np.sum(tempH[eleNodesID.astype('int')], 1)/4                  # density matrix of all active components 
-
-    if min(denmax[loadEle.astype('int')[:]])>np.spacing(1) and max(denmax[fixEle[:]])>np.spacing(1):
-        cnnt = csc_matrix((nAct,nAct))                   # connection matrix of components
-        for i in range(0,nAct):
-            for j in range(i+1,nAct):
-                if max(np.min(allden[:,[i,j]],axis=1))>0:
-                    cnnt[i,j] = 1
-                    cnnt[j,i] = 1 
-            if max(allden[loadEle.astype('int'),i])>0:
-                loadPth = np.unique(np.append(loadPth, i))
-                Frnt = np.unique(np.setdiff1d(np.append(Frnt, np.argwhere(cnnt[i,:]>0)), loadPth))
-            if max(allden[fixEle,i])>0:
-                fixSet = np.unique(np.append(fixSet, i))
-        while len(Frnt)>0:
-            loadPth = np.sort(np.append(loadPth,Frnt))
-            Temp = []
-            for i in Frnt:
-                Temp = np.append(Temp, np.argwhere(cnnt[i,:]>0))
-            Frnt = np.unique(np.setdiff1d(Temp,loadPth))
-
-        if len(np.intersect1d(loadPth,fixSet))>0:
-            strct = 1
-
-    return [strct,loadPth]
 # Topology description function and derivatives
 def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb):
     dd = xval[np.arange((i)*nEhcp,(i+1)*nEhcp)]
@@ -89,9 +50,9 @@ def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb):
 
 
 
-def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Probably need to add xmin and xmax
-    xInt = 0.5
-    yInt = 0.25
+def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component'):   ## Probably need to add xmin and xmax
+    xInt = 0.25*dx
+    yInt = 0.25*dy
     vInt = [0.4, 0.05, 0.05, np.arcsin(0.7)]
     E = 1.0 #Young's modulus
     nu = 0.3 #Poisson ratio
@@ -107,8 +68,8 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
     nEle = nelx*nely              # number of finite elements
     nNod = (nelx+1)*(nely+1)      # number of nodes
     nDof = 2*(nelx+1)*(nely+1)    # number of degree of freedoms
-    EL = DW/nelx                  # length of finite elements
-    EW = DH/nely                  # width of finite elements
+    EL = dx/nelx                  # length of finite elements
+    EW = dy/nely                  # width of finite elements
     minSz = min([EL,EW])*3          # minimum size of finite elements
     alpha = 1e-9                  # void density
     epsilon = 0.2              # regularization term in Heaviside (default 0.2)
@@ -129,7 +90,7 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
     sI=np.concatenate((sI,np.linspace(7,7,8-7)))
     iK,jK = edofMat[:,np.int32(sI)].T,edofMat[:,np.int32(sII)].T
     Iar0 = np.fliplr(np.sort(np.array([iK.flatten(order='F'),jK[:].flatten(order='F')]).T,axis=1) )        # reduced assembly indexing
-    x,y=np.meshgrid(np.linspace(0, DW,nelx+1),np.linspace(0,DH,nely+1))                # coordinates of nodal points
+    x,y=np.meshgrid(np.linspace(0, dx,nelx+1),np.linspace(0,dy,nely+1))                # coordinates of nodal points
     LSgrid={"x":x.flatten(order='F'),"y":y.flatten(order='F')}
     volNod=csc_matrix((np.ones(eleNodesID.size)/4,(eleNodesID.flatten(order='F'),np.zeros(eleNodesID.size))),shape=(nNod,1))                       # weight of each node in volume calculation 
 
@@ -140,82 +101,16 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
     loaddof_x=BC_dict['loaddof_x']                 # loaded dofs
     loaddof_y=BC_dict['loaddof_y']                 # loaded dofs
     fixDof=BC_dict['fixeddofs']      # fixed nodes
-    fixEle=[]
-    for i in range(0,len(fixDof)):
-        fixEle.append(np.argwhere(edofMat==fixDof[i])[0][0])                              # elements related to fixed nodes
-    fixEle=np.unique(fixEle)
+    
     freeDof = np.setdiff1d(np.arange(nDof),fixDof)         # index of free dofs
-
-    loadEle=np.array([
-        np.argwhere(edofMat==loaddof_x)[0][0],
-        np.argwhere(edofMat==loaddof_y)[0][0]
-    ])
-
-    loadEle=np.unique(loadEle)
-    F_x=csc_matrix(([magnitude_x[0]], ([loaddof_x[0][0]], [0])), shape=(nDof, 1))
-    F_y=csc_matrix(([magnitude_y[0]], ([loaddof_y[0][0]], [0])), shape=(nDof, 1))
+    F_x=csc_matrix((magnitude_x, (loaddof_x, np.zeros_like(loaddof_x))), shape=(nDof, 1))
+    F_y=csc_matrix((magnitude_y, (loaddof_y, np.zeros_like(loaddof_y))), shape=(nDof, 1))
     F=F_x+F_y
     
-    data=BC_dict
-    fixednodes=data['fixednode']
-    loadnode=data['loadnode']
-    load_mat_print=np.zeros(((nely+1)*(nelx+1),1))
-    load_mat_print[data['fixednode']]=1
-    load_mat_print[data['loadnode'],0]=2
-    load_mat_print=load_mat_print.reshape((nely+1,nelx+1,1),order='F')
-    load_coords=np.argwhere(load_mat_print==2)[0][0:2]
-    fixed_coord1=np.argwhere(load_mat_print==1)[0][0:2]
-    fixed_coord2=np.argwhere(load_mat_print==1)[-1][0:2]
-    volfrac=np.array(data['volfrac'])
-    magnitude_x=data['magnitude_x'][0]
-    magnitude_y=data['magnitude_y'][0]
-
-
-    #Generating the beta vector:
-    X=np.array([load_coords[0]/(nely+1),  #Relative y position of load
-                            load_coords[1]/(nelx+1),  #Relative x position of load
-                            fixed_coord1[0]/(nely+1), #Relative y position of support_1
-                            fixed_coord1[1]/(nelx+1),   #Relative x position of support_1
-                            fixed_coord2[0]/(nely+1), #Relative y position of support_2
-                            fixed_coord2[1]/(nelx+1), #Relative x position of support_2
-                            volfrac,                  #Volume fraction (between 0 and 1)
-                            magnitude_x,              #magnitude of load in x 
-                            magnitude_y,              #magnitude of load in y 
-                            ])   
-
-    load_A1=X[0]*1
-    load_A2=X[1]*2
-    fixed_A1=X[2]
-    fixed_A2=X[3]*2
-    fixed_B1=X[4]
-    fixed_B2=X[5]*2
-    magx=X[7]
-    magy=X[8]
-
-    patch_x=fixed_A2
-    patch_y=1-fixed_A1
-    if fixed_A2==fixed_B2: #X coordinate
-        if patch_x<0.1:
-            patch_width=-0.1
-        else:
-            patch_width=0.1
-    else:
-        patch_width=fixed_B2-fixed_A2
-    if fixed_A1==fixed_B1:# Y coordinate
-        if patch_y<0.1:
-            patch_height=-0.1
-        else:
-            patch_height=0.1
-    else:
-        patch_height=fixed_A1-fixed_B1
-    if patch_height<-0.5:
-        patch_height=-1
-    if patch_width>0.5:
-        patch_width=1
-
+    
     #  4): INITIAL SETTING OF COMPONENTS
-    x0=np.arange(xInt, DW, 2*xInt)# x-coordinates of the centers of components
-    y0 = np.arange(yInt,DH,2*yInt)               # coordinates of initial components' center
+    x0=np.arange(xInt, dx, 2*xInt)# x-coordinates of the centers of components
+    y0 = np.arange(yInt,dy,2*yInt)               # coordinates of initial components' center
     xn = len(x0)
     yn = len(y0)                   # num. of component along x                
     x0=np.kron(x0,np.ones((1,2*yn)))
@@ -231,7 +126,6 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
     actComp = np.arange(0,N)               # initial set of active components 
     actDsvb = np.arange(0,nDsvb)          #initial set of active design variables
     nNd = 0                     
-    PhiNd = np.array([])                           # number of non-design patch and its TDF matrix
     allPhi = np.zeros((nNod,N))   
     
     
@@ -246,14 +140,14 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
     xold1 = xval.copy()
     xold2 = xval.copy()
     xmin=np.vstack((0.0, 0.0, 0.1, 0.02, 0.02, -np.pi))
-    xmax=np.vstack((DW, DH, 1.0, 0.1*min(DW,DH),0.1*min(DW,DH), np.pi))
+    xmax=np.vstack((dx, dy, 1.0, 0.1*min(dx,dy),0.1*min(dx,dy), np.pi))
     xmin=np.matlib.repmat(xmin,N,1)
     xmax=np.matlib.repmat(xmax,N,1)
     low = xmin
     upp = xmax
     nn=6*N
 
-    def comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,loadEle,fixEle,xval,denSld):
+    def comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld):
     
         allPhiDrv=lil_matrix((nNod,nDsvb))
         for i in actComp:                      # calculating TDF of the active MMCs                                                    
@@ -279,11 +173,11 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
         U[freeDof] =spsolve(K[freeDof,:][:,freeDof], F[freeDof]).reshape((len(freeDof),1))
 
         f0val = F.T*U/scl
-        fval = sum(den)*EL*EW/(DW*DH) - volfrac
+        fval = sum(den)*EL*EW/(dx*dy) - volfrac
         
         return f0val,fval,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv, denSld
     
-    def comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,loadEle,fixEle,xval,denSld):
+    def comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld):
         allPhiDrv=lil_matrix((nNod,nDsvb))
         for i in actComp:                      # calculating TDF of the active MMCs                                                            
             allPhi,allPhiDrv,xval,actComp,actDsvb = calc_Phi(allPhi,allPhiDrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb)
@@ -310,7 +204,7 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
         U[freeDof] =spsolve(K[freeDof,:][:,freeDof], F[freeDof]).reshape((len(freeDof),1))
 
         f0val = F.T*U/scl
-        fval = sum(den)*EL*EW/(DW*DH) - volfrac
+        fval = sum(den)*EL*EW/(dx*dy) - volfrac
 
         #--------------------------LP 4): Sensitivity analysis
         df0dx = np.zeros((1,nDsvb))
@@ -321,7 +215,7 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
         sEner = energy.reshape((energy.shape[0],1))*np.ones((1,4))/4    
         engyNod = csc_matrix((sEner.flatten(order='F'), (eleNodesID.flatten(order='F').astype('int'), np.zeros(eleNodesID.size, dtype=int)))) #nodal form of Ue'*K0*Ue
         df0dx[:,actDsvb] = -(engyNod.multiply(delta_H.reshape((delta_H.shape[0],1))).T*csc_matrix(PhimaxDrvAct)).todense()      # sensitivity of objective function     
-        dfdx[:,actDsvb] = (volNod.multiply(delta_H.reshape((delta_H.shape[0],1))).T*csc_matrix(PhimaxDrvAct)).todense()*EL*EW/(DW*DH) # sensitivity of volume constraint
+        dfdx[:,actDsvb] = (volNod.multiply(delta_H.reshape((delta_H.shape[0],1))).T*csc_matrix(PhimaxDrvAct)).todense()*EL*EW/(dx*dy) # sensitivity of volume constraint
 
         dgt = dgt0 - np.floor(np.log10(np.array([np.max(np.abs(df0dx)), np.max(np.abs(dfdx))])))    # significant digits for sens. truncation 
         df0dx = np.round(df0dx*10**dgt[0])/10**dgt[0]/scl                  # truncated scaled objective sensitivity
@@ -333,7 +227,6 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
         
     # SEC 6): OPTIMIZATION LOOP
     loop=1
-    outit = 0
     totalinner_it=0
     maxinnerinit=1
     OBJ=[]
@@ -348,7 +241,7 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
     denSld=[0]
     change=1000
 
-    f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi,actComp,actDsvb,allPhiDrv,denSld = comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,loadEle,fixEle,xval,denSld)
+    f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi,actComp,actDsvb,allPhiDrv,denSld = comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
     f0val_1=f0val.copy()
     f0val_2=f0val.copy()
     criteria=((f0val_2-f0val_1)/((abs(f0val_2)+abs(f0val_1))/2))*((f0val_1-f0val)/(abs(f0val_1)+abs(f0val))/2)
@@ -370,11 +263,11 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
             xmma,ymma,zmma,lam,xsi,eta,mu,zet,s,f0app,fapp = gcmmasub(m,nn,iter,epsimin,xval.reshape((xval.shape[0],1),order='F'),xmin,xmax,low,upp,raa0,raa,f0val,df0dx,fval,dfdx.T,a0,a,c,d)
             # The user should now calculate function values (no gradients) of the objective- and constraint
             # functions at the point xmma ( = the optimal solution of the subproblem).
-            f0valnew,fvalnew,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv, denSld = comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,loadEle,fixEle,xval,denSld)
+            f0valnew,fvalnew,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv, denSld = comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
 
             # It is checked if the approximations are conservative:
+            print()
             conserv = concheck(m,epsimin,f0app,f0valnew,fapp,fvalnew)
-
             # While the approximations are non-conservative (conserv=0), repeated inner iterations are made:
             innerit = 0
             if conserv == 0:
@@ -387,7 +280,7 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
                     xmma,ymma,zmma,lam,xsi,eta,mu,zet,s,f0app,fapp = gcmmasub(m,nn,iter,epsimin,xval,xmin,xmax,low,upp,raa0,raa,f0val,df0dx,fval,dfdx.T,a0,a,c,d)
                     # The user should now calculate function values (no gradients) of the objective- and 
                     # constraint functions at the point xmma ( = the optimal solution of the subproblem).
-                    f0valnew,fvalnew,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv,denSld = comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,loadEle,fixEle,xval,denSld)
+                    f0valnew,fvalnew,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv,denSld = comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
                     # It is checked if the approximations have become conservative:
                     conserv = concheck(m,epsimin,f0app,f0valnew,fapp,fvalnew)
                     
@@ -398,31 +291,95 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
         f0val_2=f0val_1.copy()
         f0val_1=f0val.copy()
         
-        f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi,actComp,actDsvb,allPhiDrv,denSld = comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,loadEle,fixEle,xval,denSld)
+        f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi,actComp,actDsvb,allPhiDrv,denSld = comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
         OBJ.append(f0val*scl)       # scaled objective function 
         CONS.append(fval + volfrac)             # volume constraint    
 
         # ---  Plotting current design
         #Plot components
         if plotting=="contour":
+            plt.rcParams["figure.figsize"] = (5*dx,5*dy)
+
             fig = plt.figure()
             ax = plt.subplot(111)
             colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
             for i, color in zip(range(0,N), colors):
                 ax.contourf(x,y,np.flipud(allPhi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
-            ax.add_patch(plt.Rectangle((patch_x+0.01,patch_y),patch_width, patch_height,hatch='/',
-                                        clip_on=False,linewidth = 0))
-
-            ax.add_patch(plt.Rectangle((0,0),2.0, 1.0,
+            
+            # Add a rectangle to show the domain boundary:
+            ax.add_patch(plt.Rectangle((0,0),dx, dy,
                                         clip_on=False,linewidth = 1,fill=False))
+            
+            if BC_dict['selected_boundary']==0.0:  # Left boundary
+                # Add a blue rectangle to show the support 
+                ax.add_patch(plt.Rectangle(xy = (0.0,dy*(1.0-BC_dict['boundary_position']-BC_dict['boundary_length'])),
+                                        width = BC_dict['boundary_length']*dy, 
+                                        height = 0.1,
+                                        angle = 90,
+                                        hatch='/',
+                                            clip_on=False,
+                                            linewidth = 0))
 
-            factor=0.2
-            ax.arrow(load_A2-(magx*factor),(1-load_A1-(magy*factor)),
-                        magx*factor,
-                        magy*factor,
-                        width=factor/8,
-                        length_includes_head=True,
-                        head_starts_at_zero=False)
+                for i in range(BC_dict['n_loads']):
+                    ax.arrow(dx-(BC_dict['magnitude_x'][i]*0.2),dy*(1-BC_dict['load_position'][i]),
+                                dx= BC_dict['magnitude_x'][i]*0.2,
+                                dy = BC_dict['magnitude_y'][i]*0.2,
+                                width=0.2/8,
+                                length_includes_head=True,
+                                head_starts_at_zero=False)
+                    
+            elif BC_dict['selected_boundary']==0.25: # Right boundary
+                # Add a blue rectangle to show the support 
+                ax.add_patch(plt.Rectangle(xy = (dx+0.1,dy*(1.0-BC_dict['boundary_position']-BC_dict['boundary_length'])),
+                                        width = BC_dict['boundary_length']*dy, 
+                                        height = 0.1,
+                                        angle = 90,
+                                        hatch='/',
+                                            clip_on=False,
+                                            linewidth = 0))
+
+                for i in range(BC_dict['n_loads']):
+                    ax.arrow(0.0-(BC_dict['magnitude_x'][i]*0.2),dy*(1-BC_dict['load_position'][i])-BC_dict['magnitude_y'][i]*0.2,
+                                dx= BC_dict['magnitude_x'][i]*0.2,
+                                dy = BC_dict['magnitude_y'][i]*0.2,
+                                width=0.2/8,
+                                length_includes_head=True,
+                                head_starts_at_zero=False)
+            elif BC_dict['selected_boundary']==0.5: # Bottom boundary
+                # Add a blue rectangle to show the support 
+                ax.add_patch(plt.Rectangle(xy = (dx*BC_dict['boundary_position'],-0.1),
+                                        width = BC_dict['boundary_length']*dx, 
+                                        height = 0.1,
+                                        angle = 0.0,
+                                        hatch='/',
+                                            clip_on=False,
+                                            linewidth = 0))
+
+                for i in range(BC_dict['n_loads']):
+                    ax.arrow(dx*(BC_dict['load_position'][i])-BC_dict['magnitude_x'][i]*0.2,dy-(BC_dict['magnitude_y'][i]*0.2),
+                                dx= BC_dict['magnitude_x'][i]*0.2,
+                                dy = BC_dict['magnitude_y'][i]*0.2,
+                                width=0.2/8,
+                                length_includes_head=True,
+                                head_starts_at_zero=False)
+                    
+            elif BC_dict['selected_boundary']==0.75: # Top boundary
+                # Add a blue rectangle to show the support 
+                ax.add_patch(plt.Rectangle(xy = (dx*BC_dict['boundary_position'],dy),
+                                        width = BC_dict['boundary_length']*dx, 
+                                        height = 0.1,
+                                        angle = 0.0,
+                                        hatch='/',
+                                            clip_on=False,
+                                            linewidth = 0))
+
+                for i in range(BC_dict['n_loads']):
+                    ax.arrow(dx*(BC_dict['load_position'][i])-BC_dict['magnitude_x'][i]*0.2,0.0-(BC_dict['magnitude_y'][i]*0.2),
+                                dx= BC_dict['magnitude_x'][i]*0.2,
+                                dy = BC_dict['magnitude_y'][i]*0.2,
+                                width=0.2/8,
+                                length_includes_head=True,
+                                head_starts_at_zero=False)
 
             display.display(plt.gcf())
             display.clear_output(wait=True)
@@ -434,7 +391,6 @@ def run_mmc(BC_dict,nelx=100,nely=50,DW=2.0,DH=1.0,plotting='contour'):   ## Pro
             display.display(plt.gcf())
             display.clear_output(wait=True)
             plt.show()
-        
         
         if loop>=15 and (fval/volfrac)<5e-4:
             objVr5 = abs(max(abs(OBJ[-15:] - np.mean(OBJ[-15:]))) / np.mean(OBJ[-15:]))

@@ -30,7 +30,7 @@ class sogym(gym.Env):
         if self.observation_type =='dense':
             self.observation_space = gym.spaces.Dict(
                                         spaces={
-                                            "conditions": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "beta": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
                                             "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
@@ -40,12 +40,13 @@ class sogym(gym.Env):
         elif self.observation_type =='box_dense':
                                          self.observation_space = gym.spaces.Box(low=-np.pi, high=np.pi, shape=(9+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
 
+
         elif self.observation_type =='image':
             #To define the image space here.
             self.observation_space = gym.spaces.Dict(
                                         spaces={
                                             "image": gym.spaces.Box(0, 255, img_shape,dtype=np.uint8), # Image of the current design
-                                            "conditions": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "beta": gym.spaces.Box(-1, 1, (9,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
                                             "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
@@ -62,49 +63,48 @@ class sogym(gym.Env):
         self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
         self.xmax=np.vstack((self.dx, self.dy, self.dx, self.dy, 0.2, 0.2)) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
         self.x,self.y=np.meshgrid(np.linspace(0, self.dx,self.nelx+1),np.linspace(0,self.dy,self.nely+1))                # coordinates of nodal points
-
         self.variables_plot=[]
 
+        # We define a new beta vector:
+        load_vector = np.zeros((4,5))
+        # I will define a volfrac vector which will be a 1 x 1 vector containing 'volfrac'.
+        volfrac_vector = np.zeros((1,1))
+        # I want to fill the vectors depending on the number of loads and supports I have:
+        # Define the support vector with information about different supports
+        support_vector = np.array([
+            self.conditions['selected_boundary'],
+            self.conditions['support_type'],
+            self.conditions['boundary_length'],
+            self.conditions['boundary_position']
+        ])
+        for i in range(self.conditions['n_loads']):
+            load_vector[0,i]=self.conditions['load_position'][i]
+            load_vector[1,i]=self.conditions['load_orientation'][i]
+            load_vector[2,i]=self.conditions['magnitude_x'][i]
+            load_vector[3,i]=self.conditions['magnitude_y'][i]
 
-        load_mat_print=np.zeros(((self.nely+1)*(self.nelx+1),1))
-        load_mat_print[self.conditions['fixednode']]=1
-        load_mat_print[self.conditions['loadnode'],0]=2
-        load_mat_print=load_mat_print.reshape((self.nely+1,self.nelx+1,1),order='F')
+        volfrac_vector = self.conditions['volfrac']
 
-        load_coords=np.argwhere(load_mat_print==2)[0][0:2]
-        fixed_coord1=np.argwhere(load_mat_print==1)[0][0:2]
-        fixed_coord2=np.argwhere(load_mat_print==1)[-1][0:2]
-        volfrac=np.array(self.conditions['volfrac'])
-        magnitude_x=self.conditions['magnitude_x'][0]
-        magnitude_y=self.conditions['magnitude_y'][0]
+        # Let's concatenate everything into a single vector 'beta':
+        self.beta = np.concatenate((support_vector.flatten(order='F'),load_vector.flatten(order='F'),volfrac_vector),axis=None) # The new beta vector is a 25 x 1 vector
 
-
-        beta=np.array([load_coords[0]/(self.nely+1),  #Relative y position of load
-                                  load_coords[1]/(self.nelx+1),  #Relative x position of load
-                                  fixed_coord1[0]/(self.nely+1), #Relative y position of support_1
-                                fixed_coord1[1]/(self.nelx+1),   #Relative x position of support_1
-                                  fixed_coord2[0]/(self.nely+1), #Relative y position of support_2
-                                  fixed_coord2[1]/(self.nelx+1), #Relative x position of support_2
-                                  volfrac,                  #Volume fraction (between 0 and 1)
-                                  magnitude_x,              #magnitude of load in x 
-                                  magnitude_y  ])          #magnitude of load in y 
-        
+    
         self.variables=np.zeros((self.N_components*self.N_actions,1))
-        self.out_conditions=beta
+        self.out_conditions=self.beta
         self.action_count=0
         self.saved_volume=[0.0]
         self.plot_conditions = self.out_conditions
         # I need to initialize an empty instance of Phi:
         self.Phi = np.zeros(((self.nelx+1)*(self.nely+1), self.N_components))
         if self.observation_type=='dense':
-            self.observation={"conditions":np.float32(self.out_conditions),
+            self.observation={"beta":np.float32(self.beta),
                             "design_variables":np.float32(self.variables.flatten()),
                             "volume":np.array([0.0],dtype=np.float32),
                             "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                             }
         elif self.observation_type=='box_dense':        
             self.observation=np.concatenate(
-                (np.float32(self.out_conditions),
+                (np.float32(self.beta),
                  np.array([0.0],dtype=np.float32),
                  np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                  np.float32(self.variables.flatten()))
@@ -112,7 +112,7 @@ class sogym(gym.Env):
 
         elif self.observation_type=='image':
             self.observation={"image":self.gen_image(resolution=(128,64)),
-                            "conditions":np.float32(self.out_conditions),
+                            "beta":np.float32(self.beta),
                             "design_variables":np.float32(self.variables.flatten()),
                             "volume":np.array([0.0],dtype=np.float32),
                             "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
@@ -168,23 +168,23 @@ class sogym(gym.Env):
 
 
             if self.vol_constraint_type=='hard':  
-                if self.volume<= self.out_conditions[6] and self.check_connec(): # The desired volume fraction is respected
+                if self.volume<= self.conditions['volfrac'] and self.check_connec(): # The desired volume fraction is respected
                     reward=(1/(self.compliance+1e-8)) # The reward is the inverse of the compliance (AKA the stiffness of the structure)
                 else:
                     reward=0.0
             else:
-                reward=(1/(self.compliance+1e-8)) * (1-(self.volume-self.out_conditions[6])**2) # The reward is the inverse of the compliance (AKA the stiffness of the structure) times a penalty term for the volume fraction
+                reward=(1/(self.compliance+1e-8)) * (1-(self.volume-self.out_conditions['volfrac'])**2) # The reward is the inverse of the compliance (AKA the stiffness of the structure) times a penalty term for the volume fraction
             
         info={}
         if self.observation_type=='dense':
-            self.observation = {"conditions":np.float32(self.out_conditions),
+            self.observation = {"beta":np.float32(self.beta),
                     "design_variables":np.float32(self.variables.flatten())/np.pi,
                     "volume":np.array([self.volume],dtype=np.float32),
                     "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                     }
         elif self.observation_type=='box_dense':        
             self.observation=np.concatenate(
-                (np.float32(self.out_conditions),
+                (np.float32(self.beta),
                  np.array([self.volume],dtype=np.float32),
                  np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                  np.float32(self.variables.flatten())/np.pi)
@@ -192,7 +192,7 @@ class sogym(gym.Env):
                  
         elif self.observation_type=='image':
             self.observation = {"image":self.gen_image(resolution=(128,64)),
-                    "conditions":np.float32(self.out_conditions),
+                    "conditions":np.float32(self.beta),
                     "design_variables":np.float32(self.variables.flatten())/np.pi,
                     "volume":np.array([self.volume],dtype=np.float32),
                     "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
@@ -205,7 +205,7 @@ class sogym(gym.Env):
     
 
     def plot(self, mode='human',test=None, train_viz=True):
-        plt.rcParams["figure.figsize"] = (10,5)
+        plt.rcParams["figure.figsize"] = (5*self.dx,5*self.dy)
         X=self.plot_conditions
         
         if test is not None:
@@ -302,9 +302,6 @@ class sogym(gym.Env):
 
         # Load grayscale image
         img = (self.den.reshape((self.nely,self.nelx),order='F'))
-
-    
-
         # Threshold the image to create a binary image with dark pixels as 1s and light pixels as 0s
         thresh = cv2.threshold(img,0.1, 255, cv2.THRESH_BINARY)[1]
         thresh = np.array(thresh,dtype=np.uint8)

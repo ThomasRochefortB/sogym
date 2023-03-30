@@ -16,11 +16,12 @@ def gen_randombc():
     # Step 1: Select external boundary
     boundaries = ['left', 'right', 'bottom', 'top']
     selected_boundary = np.random.choice(boundaries)
-    support_type = np.random.choice(['fully', 'simple'])
-
+    support_type = ['fully', 'simple']
+    selected_type = np.random.choice(support_type)
+    
     # Step 2: Select fully-supported boundary length and position
-    boundary_length = np.random.uniform(0.25, 0.5) * nely if selected_boundary in ['left', 'right'] else np.random.uniform(0.25, 0.5) * nelx
-    boundary_position = np.random.uniform(0, 1-boundary_length/nely) if selected_boundary in ['left', 'right'] else np.random.uniform(0, 1-boundary_length/nelx)
+    boundary_length = np.random.uniform(0.25, 0.75) * nely if selected_boundary in ['left', 'right'] else np.random.uniform(0.25, 0.75) * nelx
+    boundary_position = np.random.uniform(0, 1-(boundary_length/nely)) if selected_boundary in ['left', 'right'] else np.random.uniform(0, 1-(boundary_length/nelx))
     boundary_length = np.round(boundary_length)
     boundary_position = np.round(boundary_position,2)
 
@@ -30,19 +31,19 @@ def gen_randombc():
     # Step 3: Select the degrees of freedom that are affected by the boundary condition:
     nodes_matrix = np.zeros((nely+1, nelx+1))
     if selected_boundary == 'left':
-        nodes_matrix[int(boundary_position*nely):int(boundary_position*nely)+int(boundary_length*nely), 0] = 1
+        nodes_matrix[int(boundary_position*nely):int(boundary_position*nely)+int(boundary_length), 0] = 1
     elif selected_boundary == 'right':
-        nodes_matrix[int(boundary_position*nely):int(boundary_position*nely)+int(boundary_length*nely), nelx] = 1
+        nodes_matrix[int(boundary_position*nely):int(boundary_position*nely)+int(boundary_length), nelx] = 1
     elif selected_boundary == 'bottom':
-        nodes_matrix[nely, int(boundary_position*nelx):int(boundary_position*nelx)+int(boundary_length*nelx)] = 1
+        nodes_matrix[nely, int(boundary_position*nelx):int(boundary_position*nelx)+int(boundary_length)] = 1
     elif selected_boundary == 'top':
-        nodes_matrix[0, int(boundary_position*nelx):int(boundary_position*nelx)+int(boundary_length*nelx)] = 1
+        nodes_matrix[0, int(boundary_position*nelx):int(boundary_position*nelx)+int(boundary_length)] = 1
 
     #generate the fixeddofs:
     fixednode=np.argwhere(nodes_matrix.reshape((((nely+1))*((nelx+1))),order='F')==1)
     fixeddofs=[]
     if selected_boundary == 'left' or selected_boundary == 'right':
-        if support_type == 'simple':
+        if selected_type == 'simple':
             for i in range(0,len(fixednode)):
                 fixeddofs.append(2*fixednode[i])
         else:
@@ -51,7 +52,7 @@ def gen_randombc():
                 fixeddofs.append((2*fixednode[i])+1)
 
     elif selected_boundary == 'bottom' or selected_boundary == 'top':
-        if support_type == 'simple':
+        if selected_type == 'simple':
             for i in range(0,len(fixednode)):
                 fixeddofs.append((2*fixednode[i])+1)
         else:
@@ -62,13 +63,13 @@ def gen_randombc():
 
     # Generate a random position for each load:
     load_position = np.round(np.random.uniform(0, 1,size=n_loads),2)
-    if support_type == 'fully':
+    if selected_type == 'fully':
         # Select a random orientation for the load:
         load_orientation = np.random.choice([0,15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240,255,270,285,300,315,330,345],size=n_loads)
-        magnitude_x = np.array([np.cos(np.radians(load_orientation))])
-        magnitude_y = np.array([np.sin(np.radians(load_orientation))])
+        magnitude_x = np.cos(np.radians(load_orientation))
+        magnitude_y = np.sin(np.radians(load_orientation))
 
-    elif support_type == 'simple':
+    elif selected_type == 'simple':
         if selected_boundary == 'left':
             load_orientation = [180]*n_loads
         elif selected_boundary == 'right':
@@ -78,8 +79,8 @@ def gen_randombc():
         elif selected_boundary == 'top':
             load_orientation = [90]*n_loads
 
-        magnitude_x = np.array([np.cos(np.radians(load_orientation))])
-        magnitude_y = np.array([np.sin(np.radians(load_orientation))])
+        magnitude_x = np.cos(np.radians(load_orientation))
+        magnitude_y = np.sin(np.radians(load_orientation))
 
     # Select a random position for the load:
     for i in range(n_loads):
@@ -96,21 +97,29 @@ def gen_randombc():
     loadnode=np.argwhere(nodes_matrix.reshape((((nely+1))*((nelx+1))),order='F')==2)
     loaddof_x=[]
     loaddof_y=[]
-    for i in range(0,len(loadnode)):
-        loaddof_x.append(2*loadnode)
-        loaddof_y.append((2*loadnode)+1)
+    for node in loadnode:
+        loaddof_x.append(2*node)
+        loaddof_y.append((2*node)+1)
+
+
+    # I need to normalize the boundary_length value based on the length of the selected boundary:
+    if selected_boundary == 'left' or selected_boundary == 'right':
+        boundary_length_norm = boundary_length/nely
+    elif selected_boundary == 'bottom' or selected_boundary == 'top':
+        boundary_length_norm = boundary_length/nelx
+
 
     out_dict = {
-                'selected_boundary':selected_boundary,
-                'support_type':support_type,
-                'boundary_length':boundary_length,
-                'boundary_position':boundary_position,
-                'n_loads':n_loads,
-                'load_position':load_position,
-                'load_orientation':load_orientation,
+                'selected_boundary':boundaries.index(selected_boundary) / len(boundaries),                # Convert selected_boundary to integers (0: left, 1: right, 2: bottom, 3: top)
+                'support_type':support_type.index(selected_type),                 # Convert support_type to integers (0: fully, 1: simple)
+                'boundary_length':boundary_length_norm,   # A single float value normalized by the length of the selected boundary
+                'boundary_position':boundary_position, # A single float value
+                'n_loads':n_loads,  # A single int value
+                'load_position':load_position,  # A list of float values
+                'load_orientation':np.array(load_orientation)/360, # A list of float values normalized by 360 degrees.
                 'fixeddofs':fixeddofs,
-                'loaddof_x':loaddof_x,
-                'loaddof_y':loaddof_y,
+                'loaddof_x':np.array(loaddof_x).flatten(),
+                'loaddof_y':np.array(loaddof_y).flatten(),
                 'magnitude_x':magnitude_x,
                 'magnitude_y':magnitude_y,
                 'volfrac':volume_fraction,
