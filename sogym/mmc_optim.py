@@ -61,7 +61,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     scl = 1  #scale factor for obj                                           
     p = 6   #power of super ellipsoid
     lmd = 100    #power of KS aggregation                                     
-    maxiter = 10 # maximum number of iterations                                       
+    maxiter = 1000 # maximum number of iterations                                       
     objVr5 = 1.0  # initial relative variat. of obj. last 5 iterations
 
     ## Setting of FE discretization

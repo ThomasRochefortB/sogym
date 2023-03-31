@@ -9,14 +9,14 @@ import cv2
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard'):
+    def __init__(self,N_components=8,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard',seed=42):
      
         self.N_components = N_components
         self.mode = mode
         self.observation_type = observation_type
         self.img_format = img_format
         self.vol_constraint_type = vol_constraint_type
-       
+        self.seed = seed
         self.N_actions = 6        
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
@@ -57,7 +57,7 @@ class sogym(gym.Env):
             raise ValueError('Invalid observation space type. Only "dense", "box_dense" and "image" are supported.')
 
     def reset(self):
-        self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc()
+        self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.seed)
         self.EW=self.dx / self.nelx # length of element
         self.EH=self.dy/ self.nely # width of element     
         self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
