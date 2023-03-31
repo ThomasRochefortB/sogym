@@ -5,7 +5,6 @@ import numpy.matlib
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.sparse import diags
-import cupy as cp
 
 # Element stiffness matrix (plane stress quadrilateral elements)
 def Ke_tril(E,nu,a,b,h):

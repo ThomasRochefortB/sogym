@@ -50,7 +50,7 @@ def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb):
 
 
 
-def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component'):   ## Probably need to add xmin and xmax
+def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probably need to add xmin and xmax
     xInt = 0.25*dx
     yInt = 0.25*dy
     vInt = [0.4, 0.05, 0.05, np.arcsin(0.7)]
@@ -61,7 +61,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component'):   ## Probably need to
     scl = 1  #scale factor for obj                                           
     p = 6   #power of super ellipsoid
     lmd = 100    #power of KS aggregation                                     
-    maxiter = 1000 # maximum number of iterations                                       
+    maxiter = 10 # maximum number of iterations                                       
     objVr5 = 1.0  # initial relative variat. of obj. last 5 iterations
 
     ## Setting of FE discretization
@@ -394,11 +394,12 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component'):   ## Probably need to
         
         if loop>=15 and (fval/volfrac)<5e-4:
             objVr5 = abs(max(abs(OBJ[-15:] - np.mean(OBJ[-15:]))) / np.mean(OBJ[-15:]))
-            
-        print('Optim: ',optimizer,'It.: ',loop+totalinner_it, ' Obj.: ',f0val, ' Vol.: ', fval, 'ch.:', objVr5, 'xval_change', change)    
-        print('Oscillation criteria: ',criteria)
-        print(fval/volfrac)
-        print("Volume fraction: ",fval," Desired: ",volfrac)
+        
+        if verbose != 0:
+            print('Optim: ',optimizer,'It.: ',loop+totalinner_it, ' Obj.: ',f0val, ' Vol.: ', fval, 'ch.:', objVr5, 'xval_change', change)    
+            print('Oscillation criteria: ',criteria)
+            print(fval/volfrac)
+            print("Volume fraction: ",fval," Desired: ",volfrac)
         loop+=1
-    return xval, f0val,loop+totalinner_it
+    return xval.squeeze(), f0val.squeeze(),loop+totalinner_it
 
