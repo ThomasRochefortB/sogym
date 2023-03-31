@@ -62,10 +62,12 @@ def gen_randombc():
 
 
     # Generate n_loads random position for each load and ensure they are different:
-    # I also need to ensure a minimum distance of 0.05 between loads
     load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)
-    while len(np.unique(load_position)) != n_loads:
-        while np.min(np.abs(np.diff(load_position))) < 0.05:
+    if n_loads==1:
+        while len(np.unique(load_position)) != n_loads:
+            load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)
+    else:
+        while len(np.unique(load_position)) != n_loads or np.min(np.abs(np.subtract.outer(load_position,load_position))[np.triu_indices(n_loads,1)]) < 0.05:
             load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)
 
         
@@ -132,5 +134,7 @@ def gen_randombc():
                 'loadnode':loadnode,
                 'fixednode':fixednode
                 }
+    if len(np.array(loaddof_x).flatten()) != len(magnitude_x):
+        print('mismatch in rand_bc!!', loaddof_x,magnitude_x,load_position,n_loads)
     return dx, dy, nelx, nely, out_dict
 

@@ -5,7 +5,7 @@ import numpy.matlib
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.sparse import diags
-
+import cupy as cp
 
 # Element stiffness matrix (plane stress quadrilateral elements)
 def Ke_tril(E,nu,a,b,h):
@@ -91,8 +91,10 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
     Iar0 = np.fliplr(np.sort(np.array([iK.flatten(order='F'),jK[:].flatten(order='F')]).T,axis=1) )        # reduced assembly indexing
     
     freeDof = np.setdiff1d(np.arange(nDof),fixDof)         # index of free dofs
-    
-    F_x=csc_matrix((magnitude_x, (loaddof_x, np.zeros_like(loaddof_x))), shape=(nDof, 1))
+    try:
+        F_x=csc_matrix((magnitude_x, (loaddof_x, np.zeros_like(loaddof_x))), shape=(nDof, 1))
+    except:
+        print('error while constructing F_x: ' , magnitude_x,loaddof_x)
     F_y=csc_matrix((magnitude_y, (loaddof_y, np.zeros_like(loaddof_y))), shape=(nDof, 1))
     F=F_x+F_y
     
@@ -106,7 +108,7 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
     K = csc_matrix((sK.flatten(order='F'), (Iar0[:,0], Iar0[:,1])), shape=(nDof, nDof))
     K =  K + K.T - diags((K.diagonal()))
     U[freeDof] =spsolve(K[freeDof,:][:,freeDof], F[freeDof]).reshape((len(freeDof),1))
-
+   
     f0val = F.T*U
     
     Comp=f0val
