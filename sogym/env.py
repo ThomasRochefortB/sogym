@@ -9,7 +9,7 @@ import cv2
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard',seed=42):
+    def __init__(self,N_components=8,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard',seed=None):
      
         self.N_components = N_components
         self.mode = mode

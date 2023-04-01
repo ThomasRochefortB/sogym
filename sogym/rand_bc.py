@@ -1,6 +1,7 @@
 import numpy as np
 import random
 def gen_randombc(seed):
+    
     random.seed(seed)
     np.random.seed(seed)
     # dx and dy will be sampled from a uniform distribution between 1.0 and 2.0. The number will only have one digit (ex: 1.1,1.2, ...)
