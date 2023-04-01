@@ -140,3 +140,20 @@ def gen_randombc(seed):
         print('mismatch in rand_bc!!', loaddof_x,magnitude_x,load_position,n_loads)
     return dx, dy, nelx, nely, out_dict
 
+def generate_prompt(conditions,dx,dy):
+
+    dict ={}
+    dict['support'] = {'type':conditions['support_type'], 'boundary':conditions['selected_boundary'], 'length':conditions['boundary_length'], 'position':conditions['boundary_position']}
+    dict['domain'] = {'type':'rectangular',
+                      'x_dimension': dx,
+                      'y_dimension': dy}
+    
+    dict['constraints'] = {'desired_volume_constraint':conditions['volfrac']}
+
+    for i in range(conditions['n_loads']):
+        dict['load_'+str(i)] = {'type':'point_load',
+                                'position':conditions['load_position'][i],
+                                'orientation':conditions['load_orientation'][i],
+                                'magnitude_x':conditions['magnitude_x'][i],
+                                'magnitude_y':conditions['magnitude_y'][i]}
+    return str(dict)

@@ -1,5 +1,6 @@
 import gym
 from sogym.struct import *
+from sogym.rand_bc import generate_prompt
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -52,12 +53,26 @@ class sogym(gym.Env):
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )   
-            pass
+        elif self.observation_type =='text_dict':
+            from transformers import AutoTokenizer, AutoModel
+            self.tokenizer = AutoTokenizer.from_pretrained("huggingface/CodeBERTa-small-v1")
+            self.model = AutoModel.from_pretrained("huggingface/CodeBERTa-small-v1")
+            self.observation_space = gym.spaces.Dict(
+                                        spaces={
+                                            # Prompt will have no max min (-inf,inf)
+                                            "prompt": gym.spaces.Box(-np.inf,np.inf, (768*512,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
+                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
+                                            }
+                                        )
         else:
             raise ValueError('Invalid observation space type. Only "dense", "box_dense" and "image" are supported.')
 
     def reset(self):
         self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.seed)
+        prompt = generate_prompt(self.conditions,self.dx,self.dy)
+        self.model_output =  self.model(self.tokenizer(prompt, return_tensors="pt",padding = 'max_length').input_ids).last_hidden_state.detach().numpy().flatten()
         self.EW=self.dx / self.nelx # length of element
         self.EH=self.dy/ self.nely # width of element     
         self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
@@ -116,7 +131,15 @@ class sogym(gym.Env):
                             "volume":np.array([0.0],dtype=np.float32),
                             "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                             }
+        elif self.observation_type == 'text_dict':
+            self.observation = {
+                "prompt": np.float32(self.model_output),
+                "design_variables": np.float32(self.variables.flatten()),
+                "volume": np.array([0.0], dtype=np.float32),
+                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
+            }
         else:
+
             raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
 
         return self.observation 
@@ -197,6 +220,13 @@ class sogym(gym.Env):
                     "volume":np.array([self.volume],dtype=np.float32),
                     "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                     }
+        elif self.observation_type == 'text_dict':
+            self.observation = {
+                "prompt": np.float32(self.model_output),
+                    "design_variables":np.float32(self.variables.flatten())/np.pi,
+                    "volume":np.array([self.volume],dtype=np.float32),
+                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
+            }
         else:
             raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
         self.saved_volume.append(self.volume)
