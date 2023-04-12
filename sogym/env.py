@@ -423,11 +423,10 @@ class sogym(gym.Env):
                 labels_load .append(labels[-1,int(self.conditions['load_position'][i]*self.nelx)])
 
         for load in labels_load:
-             for load in labels_load:
-                if load in label_support and load!=0:
-                    connec.append(True)
-                else:
-                    connec.append(False)
+            if load in label_support and load!=0:
+                connec.append(True)
+            else:
+                connec.append(False)
         # return True if connec is not empty and if all its elements are True
         return bool(connec) and all(connec)
     
