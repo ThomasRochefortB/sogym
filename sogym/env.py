@@ -10,7 +10,7 @@ import cv2
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard',seed=None):
+    def __init__(self,N_components=8,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard',seed=None,model=None,tokenizer=None):
      
         self.N_components = N_components
         self.mode = mode
@@ -54,9 +54,9 @@ class sogym(gym.Env):
                                             }
                                         )   
         elif self.observation_type =='text_dict':
-            from transformers import AutoTokenizer, AutoModel
-            self.tokenizer = AutoTokenizer.from_pretrained("huggingface/CodeBERTa-small-v1")
-            self.model = AutoModel.from_pretrained("huggingface/CodeBERTa-small-v1")
+            #from transformers import AutoTokenizer, AutoModel
+            #self.tokenizer = AutoTokenizer.from_pretrained("huggingface/CodeBERTa-small-v1")
+            #self.model = AutoModel.from_pretrained("huggingface/CodeBERTa-small-v1").to('cuda')
             self.observation_space = gym.spaces.Dict(
                                         spaces={
                                             # Prompt will have no max min (-inf,inf)
@@ -71,8 +71,9 @@ class sogym(gym.Env):
 
     def reset(self):
         self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.seed)
-        prompt = generate_prompt(self.conditions,self.dx,self.dy)
-        self.model_output =  self.model(self.tokenizer(prompt, return_tensors="pt",padding = 'max_length').input_ids).last_hidden_state.detach().numpy().flatten()
+        if self.observation_type == 'text_dict':
+            prompt = generate_prompt(self.conditions,self.dx,self.dy)
+            self.model_output =  model(tokenizer(prompt, return_tensors="pt",padding = 'max_length').input_ids.to('cuda')).last_hidden_state.detach().cpu().numpy().flatten()
         self.EW=self.dx / self.nelx # length of element
         self.EH=self.dy/ self.nely # width of element     
         self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
