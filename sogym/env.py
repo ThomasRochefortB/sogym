@@ -6,6 +6,7 @@ import random
 import matplotlib.pyplot as plt
 from sogym.rand_bc import gen_randombc
 import cv2
+import torch
 
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
@@ -24,9 +25,9 @@ class sogym(gym.Env):
 
         self.action_space = gym.spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
         if self.img_format == 'CHW':
-            img_shape = (3,64,128)
+            img_shape = (3,128,128)
         elif self.img_format == 'HWC':
-            img_shape = (64,128,3)
+            img_shape = (128,128,3)
 
         if self.observation_type =='dense':
             self.observation_space = gym.spaces.Dict(
@@ -56,7 +57,10 @@ class sogym(gym.Env):
         elif self.observation_type =='text_dict':
             #from transformers import AutoTokenizer, AutoModel
             #self.tokenizer = AutoTokenizer.from_pretrained("huggingface/CodeBERTa-small-v1")
-            #self.model = AutoModel.from_pretrained("huggingface/CodeBERTa-small-v1").to('cuda')
+            self.tokenizer = tokenizer
+            self.model = model
+            #device agnostic code:
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             self.observation_space = gym.spaces.Dict(
                                         spaces={
                                             # Prompt will have no max min (-inf,inf)
@@ -73,7 +77,7 @@ class sogym(gym.Env):
         self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.seed)
         if self.observation_type == 'text_dict':
             prompt = generate_prompt(self.conditions,self.dx,self.dy)
-            self.model_output =  model(tokenizer(prompt, return_tensors="pt",padding = 'max_length').input_ids.to('cuda')).last_hidden_state.detach().cpu().numpy().flatten()
+            self.model_output =  self.model(self.tokenizer(prompt, return_tensors="pt",padding = 'max_length').input_ids.to(self.device)).last_hidden_state.detach().cpu().numpy().flatten()
         self.EW=self.dx / self.nelx # length of element
         self.EH=self.dy/ self.nely # width of element     
         self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
@@ -126,7 +130,7 @@ class sogym(gym.Env):
                  ,axis=0)
 
         elif self.observation_type=='image':
-            self.observation={"image":self.gen_image(resolution=(128,64)),
+            self.observation={"image":self.gen_image(resolution=(128,128)),
                             "beta":np.float32(self.beta),
                             "design_variables":np.float32(self.variables.flatten()),
                             "volume":np.array([0.0],dtype=np.float32),
@@ -215,8 +219,8 @@ class sogym(gym.Env):
                  ,axis=0)
                  
         elif self.observation_type=='image':
-            self.observation = {"image":self.gen_image(resolution=(128,64)),
-                    "conditions":np.float32(self.beta),
+            self.observation = {"image":self.gen_image(resolution=(128,128)),
+                    "beta":np.float32(self.beta),
                     "design_variables":np.float32(self.variables.flatten())/np.pi,
                     "volume":np.array([self.volume],dtype=np.float32),
                     "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
@@ -261,12 +265,17 @@ class sogym(gym.Env):
             for i, color in zip(range(0,self.last_Phi.shape[1]), self.render_colors):
                 ax.contourf(x,y,np.flipud(self.last_Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
         else:
-            for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
-                ax.contourf(x,y,np.flipud(self.Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
-        
+            if self.variables_plot==[]:
+                 for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
+                    ax.contourf(x,y,np.flipud(self.Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors='white')
+            else:
+                for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
+                    ax.contourf(x,y,np.flipud(self.Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
+                    
+            
                     # Add a rectangle to show the domain boundary:
         ax.add_patch(plt.Rectangle((0,0),dx, dy,
-                                    clip_on=False,linewidth = 1,fill=False))
+                                    clip_on=False,linewidth = 10,fill=False))
         
         if condition_dict['selected_boundary']==0.0:  # Left boundary
             # Add a blue rectangle to show the support 
@@ -344,8 +353,7 @@ class sogym(gym.Env):
         plt.close()
         return fig    
 
-    def gen_image(self,resolution=(128,64)):
-        assert resolution[0] % resolution[1] == 0, "2x1 aspect ratio required"
+    def gen_image(self,resolution):
         fig = self.plot(train_viz=False)
         fig.tight_layout(pad=0)
         fig.canvas.draw()
@@ -361,7 +369,7 @@ class sogym(gym.Env):
         #data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
         #data = data.reshape((fig.canvas.get_width_height()[::-1] + (3,)))
         # Let's resize the image to something more reasonable using numpy:
-        res = cv2.resize(buf, dsize=(128, 64), interpolation=cv2.INTER_CUBIC)
+        res = cv2.resize(buf, dsize=(resolution[0], resolution[1]), interpolation=cv2.INTER_CUBIC)
         # Convert res to channel first:
         if self.img_format == 'CHW':
             res = np.moveaxis(res, -1, 0)
