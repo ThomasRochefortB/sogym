@@ -6,8 +6,12 @@ import random
 import matplotlib.pyplot as plt
 from sogym.rand_bc import gen_randombc
 import cv2
+<<<<<<< HEAD
 import torch
 
+=======
+import math
+>>>>>>> 237df9ffa5eeb40b1d6b990768bce50805820364
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
@@ -73,8 +77,16 @@ class sogym(gym.Env):
         else:
             raise ValueError('Invalid observation space type. Only "dense", "box_dense" and "image" are supported.')
 
-    def reset(self):
+    def reset(self,start_dict=None):
+        
         self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.seed)
+        if start_dict is not None:
+            self.dx =start_dict['dx']
+            self.dy = start_dict['dy']
+            self.nelx = start_dict['nelx']
+            self.nely = start_dict['nely']
+            self.conditions = start_dict['conditions']
+            
         if self.observation_type == 'text_dict':
             prompt = generate_prompt(self.conditions,self.dx,self.dy)
             self.model_output =  self.model(self.tokenizer(prompt, return_tensors="pt",padding = 'max_length').input_ids.to(self.device)).last_hidden_state.detach().cpu().numpy().flatten()
@@ -192,7 +204,6 @@ class sogym(gym.Env):
             self.last_conditions,self.last_nelx, self.last_nely ,self.last_x, self.last_y ,self.last_dx, self.last_dy = self.conditions, self.nelx, self.nely, self.x, self.y, self.dx, self.dy
             self.compliance,self.volume, self.U, self.F=calculate_compliance(self.H,self.conditions,self.dx,self.dy,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
 
-
             if self.vol_constraint_type=='hard':  
                 if self.volume<= self.conditions['volfrac'] and self.check_connec(): # The desired volume fraction is respected
                     reward=(1/(self.compliance+1e-8)) # The reward is the inverse of the compliance (AKA the stiffness of the structure)
@@ -203,6 +214,8 @@ class sogym(gym.Env):
                     reward=(1/(self.compliance+1e-8)) * (1-abs(self.volume-self.conditions['volfrac']))**6 # The reward is the inverse of the compliance (AKA the stiffness of the structure) times a penalty term for the volume fraction
                 else:
                     reward=0.0
+            if math.isnan(reward): #Sometimes I get some nan rewards which screws training... need to investigate later but for now we will catch it like this.
+                reward = 0.0
         info={}
         if self.observation_type=='dense':
             self.observation = {"beta":np.float32(self.beta),
