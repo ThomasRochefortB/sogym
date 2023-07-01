@@ -6,12 +6,8 @@ import random
 import matplotlib.pyplot as plt
 from sogym.rand_bc import gen_randombc
 import cv2
-<<<<<<< HEAD
 import torch
-
-=======
 import math
->>>>>>> 237df9ffa5eeb40b1d6b990768bce50805820364
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
