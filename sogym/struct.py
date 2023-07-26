@@ -5,6 +5,9 @@ import numpy.matlib
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.sparse import diags
+import numba
+
+
 
 # Element stiffness matrix (plane stress quadrilateral elements)
 def Ke_tril(E,nu,a,b,h):
@@ -21,30 +24,29 @@ def Ke_tril(E,nu,a,b,h):
     return Ke
 
 
-# Topology description function and derivatives
-def calc_Phi(allPhi,xval,i,LSgrid,p,nEhcp):
-    
-    dd = xval[:,i]
-    x0 = dd[0]
-    y0 = dd[1]
-    L = dd[2] + np.spacing(1)
-    t1 = dd[3]
-    t2 = dd[4] 
-    st = np.sin(dd[5])
-    ct = np.cos(dd[5])  
-    
-    x1 = ct*(LSgrid['x']-x0) + st*(LSgrid['y']-y0) + np.spacing(1)                   # local x of each grid
-    y1 = -st*(LSgrid['x']-x0) + ct*(LSgrid['y']-y0) + np.spacing(1)                  # local y of each grid
+@numba.njit
+def calc_Phi(variable, LSgrid, p, nEhcp):
+    x0 = variable[0,:]
+    y0 = variable[1,:]
+    L = variable[2,:] + np.spacing(1)
+    t1 = variable[3,:]
+    t2 = variable[4,:]
+    angle = variable[5,:]
+
+    st = np.sin(angle)
+    ct = np.cos(angle)
+
+    x1 = ct*(LSgrid[0][:,None]-x0) + st*(LSgrid[1][:,None]-y0) + np.spacing(1)
+    y1 = -st*(LSgrid[0][:,None]-x0) + ct*(LSgrid[1][:,None]-y0) + np.spacing(1)
     l = (t1+t2)/2 + (t2-t1)/2/L*x1 + np.spacing(1)
     temp = ((x1)**p)/((L**p)+1e-08) + ((y1)**p)/((l**p)+1e-08)
-    allPhi[:,i] = 1 - temp**(1/p)                                    # TDF of i-th component
+    allPhi = 1 - temp**(1/p)
+    
     return allPhi
 
 #Smoothed Heaviside function
 def Heaviside(phi,alpha,epsilon):
-    H = 3*(1-alpha)/4*(phi/epsilon-phi**3/(3*(epsilon)**3)) + (1+alpha)/2
-    H=np.where(phi>epsilon,1,H)
-    H=np.where(phi<-epsilon,alpha,H)
+    H = np.select([phi>epsilon, phi<-epsilon, True], [1, alpha, 3*(1-alpha)/4*(phi/epsilon-phi**3/(3*(epsilon)**3)) + (1+alpha)/2])
     return H
         
     
@@ -118,34 +120,31 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
 
 #Function that takes a variable vector, and generates the contours of the components
 def build_design(variable,DW=2.0,DH=1.0,nelx=100,nely=50):
-    xval=variable
-    lmd = 100    #power of KS aggregation                                     
-    nEle = nelx*nely              # number of finite elements
-
+    lmd = 100 
+    nEle = nelx*nely             
     p=6
-    alpha=1e-9 # parameter alpha in the Heaviside function
+    alpha=1e-9 
     epsilon=0.2
     N=variable.shape[1]
-    actComp = np.arange(0,N)               # initial set of active components 
-    nEhcp = 6                      # number design variables each component
-    nNod = (nelx+1)*(nely+1)      # number of nodes
+    actComp = np.arange(0,N)               
+    nEhcp = 6 
+    nNod = (nelx+1)*(nely+1)
     
     allPhi = np.zeros((nNod,N))   
     x,y=np.meshgrid(np.linspace(0, DW,nelx+1),np.linspace(0,DH,nely+1))
-    LSgrid={"x":x.flatten(order='F'),"y":y.flatten(order='F')}
-    nodMat = np.reshape(np.array(range(0,nNod)),(1+nely,1+nelx),order='F')                    # maxtrix of nodes numbers (int32)
+    LSgrid=np.array([x.flatten(order='F'),y.flatten(order='F')])
+    nodMat = np.reshape(np.array(range(0,nNod)),(1+nely,1+nelx),order='F')                    
     edofVec = np.reshape(2*nodMat[0:-1,0:-1],(nEle,1),order='F')
-    edofMat = edofVec + np.array([0, 1, 2*nely+2,2*nely+3, 2*nely+4, 2*nely+5, 2, 3])              # connectivity matrix
-    eleNodesID = edofMat[:,0:8:2]/2    
+    edofMat = edofVec + np.array([0, 1, 2*nely+2,2*nely+3, 2*nely+4, 2*nely+5, 2, 3])             
+    eleNodesID = edofMat[:,0:8:2]//2   
     
-    for i in actComp:                      # calculating TDF of the active MMCs                                                            
-        allPhi = calc_Phi(allPhi,xval,i,LSgrid,p,nEhcp)
+    allPhi = calc_Phi(variable, LSgrid, p, nEhcp)
     temp = np.exp(lmd*allPhi)
     temp = np.where(temp==0,1e-08,temp)
-    Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        # global TDF using K-S aggregation
-     #%--------------------------LP 3): Finite element analysis
-    H = Heaviside(Phimax,alpha,epsilon)                            # nodal density vector 
-    den = np.sum(H[eleNodesID.astype('int')],1)/4                                 # elemental density vector (for volume)
+    Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        
+    
+    H = Heaviside(Phimax,alpha,epsilon)                          
+    den = np.sum(H[eleNodesID.astype('int')],1)/4                                 
 
     return H, Phimax,allPhi, den
 
