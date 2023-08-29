@@ -60,7 +60,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     dgt0 = 5 #significant digit of sens.
     scl = 1  #scale factor for obj                                           
     p = 6   #power of super ellipsoid
-    lmd = 100    #power of KS aggregation                                     
+    lmd = 100    #power of KS aggregation   (default 100)                                   
     maxiter = 1000 # maximum number of iterations                                       
     objVr5 = 1.0  # initial relative variat. of obj. last 5 iterations
 
@@ -72,7 +72,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     EW = dy/nely                  # width of finite elements
     minSz = min([EL,EW])*3          # minimum size of finite elements
     alpha = 1e-9                  # void density
-    epsilon = 0.2              # regularization term in Heaviside (default 0.2)
+    epsilon = 0.2             # regularization term in Heaviside (default 0.2)
     Ke = Ke_tril(E,nu,EL,EW,h)  # non-zero upper triangular of ele. stiffness 
     KE=np.tril(np.ones(8)).flatten(order='F')
     KE[KE==1] = Ke.T
@@ -140,6 +140,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     xold1 = xval.copy()
     xold2 = xval.copy()
     xmin=np.vstack((0.0, 0.0, 0.1, 0.02, 0.02, -np.pi))
+
     xmax=np.vstack((dx, dy, 1.0, 0.1*min(dx,dy),0.1*min(dx,dy), np.pi))
     xmin=np.matlib.repmat(xmin,N,1)
     xmax=np.matlib.repmat(xmax,N,1)
