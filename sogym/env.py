@@ -11,7 +11,7 @@ import math
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard',seed=None,model=None,tokenizer=None,testing_dict=None):
+    def __init__(self,N_components=8,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard',seed=None,model=None,tokenizer=None):
      
         self.N_components = N_components
         self.mode = mode
@@ -20,10 +20,8 @@ class sogym(gym.Env):
         self.vol_constraint_type = vol_constraint_type
         self.seed = seed
         self.N_actions = 6 
-        self.testing_dict = testing_dict
 
-        if self.testing_dict is not None:
-            self.counter=0  
+        self.counter=0  
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
 
@@ -79,7 +77,13 @@ class sogym(gym.Env):
 
     def reset(self,start_dict=None):
         
-        self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.seed)
+        
+        if self.mode == 'test':
+            self.counter+=1
+            self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.counter)
+        else:
+            self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.seed)
+            
         if start_dict is not None:
             self.dx = start_dict['dx']
             self.dy = start_dict['dy']
@@ -87,12 +91,6 @@ class sogym(gym.Env):
             self.nely = start_dict['nely']
             self.conditions = start_dict['conditions']
 
-        if testing_dict is not None:
-            self.dx = testing_dict['dx']
-            self.dy = testing_dict['dy']
-            self.nelx = testing_dict['nelx']
-            self.nely = testing_dict['nely']
-            self.conditions = testing_dict['conditions']
             
         if self.observation_type == 'text_dict':
             prompt = generate_prompt(self.conditions,self.dx,self.dy)
