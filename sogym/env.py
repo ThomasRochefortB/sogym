@@ -1,5 +1,5 @@
 import gym
-from sogym.struct import *
+from sogym.struct import build_design, calculate_compliance
 from sogym.rand_bc import generate_prompt
 import numpy as np
 import random
@@ -20,7 +20,6 @@ class sogym(gym.Env):
         self.vol_constraint_type = vol_constraint_type
         self.seed = seed
         self.N_actions = 6 
-
         self.counter=0  
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
