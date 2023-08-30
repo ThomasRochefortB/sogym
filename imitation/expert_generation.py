@@ -1,1 +1,1 @@
-from sogym.env import sogym
+from sogym import env
