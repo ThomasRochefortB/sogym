@@ -34,7 +34,7 @@ class sogym(gym.Env):
         if self.observation_type =='dense':
             self.observation_space = gym.spaces.Dict(
                                         spaces={
-                                            "beta": gym.spaces.Box(-1, 1, (25,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "beta": gym.spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
                                             "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
@@ -42,23 +42,20 @@ class sogym(gym.Env):
                                         )
         
         elif self.observation_type =='box_dense':
-                                         self.observation_space = gym.spaces.Box(low=-np.pi, high=np.pi, shape=(25+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
+            self.observation_space = gym.spaces.Box(low=-np.pi, high=np.pi, shape=(27+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
 
 
         elif self.observation_type =='image':
-            #To define the image space here.
             self.observation_space = gym.spaces.Dict(
                                         spaces={
                                             "image": gym.spaces.Box(0, 255, img_shape,dtype=np.uint8), # Image of the current design
-                                            "beta": gym.spaces.Box(-1, 1, (25,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "beta": gym.spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
                                             "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
                                             "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
                                             "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )   
         elif self.observation_type =='text_dict':
-            #from transformers import AutoTokenizer, AutoModel
-            #self.tokenizer = AutoTokenizer.from_pretrained("huggingface/CodeBERTa-small-v1")
             self.tokenizer = tokenizer
             self.model = model
             #device agnostic code:
@@ -73,7 +70,7 @@ class sogym(gym.Env):
                                             }
                                         )
         else:
-            raise ValueError('Invalid observation space type. Only "dense", "box_dense" and "image" are supported.')
+            raise ValueError('Invalid observation space type. Only "dense", "box_dense" , "text_dict"(experimental) and "image" are supported.')
 
     def reset(self,start_dict=None):
         
@@ -121,8 +118,12 @@ class sogym(gym.Env):
             load_vector[3,i]=self.conditions['magnitude_y'][i]
 
         volfrac_vector = self.conditions['volfrac']
+
+        # Let's define a 'domain vector' which will have dx and dy:
+        domain_vector = np.array([self.dx,self.dy])
+
         # Let's concatenate everything into a single vector 'beta':
-        self.beta = np.concatenate((support_vector.flatten(order='F'),load_vector.flatten(order='F'),volfrac_vector),axis=None) # The new beta vector is a 25 x 1 vector
+        self.beta = np.concatenate((support_vector.flatten(order='F'),load_vector.flatten(order='F'),volfrac_vector, domain_vector),axis=None) # The new beta vector is a 27 x 1 vector
 
     
         self.variables=np.zeros((self.N_components*self.N_actions,1))
