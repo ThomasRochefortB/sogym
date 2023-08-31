@@ -176,7 +176,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
         f0val = F.T*U/scl
         fval = sum(den)*EL*EW/(dx*dy) - volfrac
         
-        return f0val,fval,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv, denSld
+        return f0val,fval,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv, denSld, den
     
     def comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld):
         allPhiDrv=lil_matrix((nNod,nDsvb))
@@ -224,7 +224,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
         dfdx=dfdx/np.max(abs(dfdx))
         df0dx=df0dx/np.max(abs(df0dx))
         
-        return f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv, denSld
+        return f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv, denSld, den
         
     # SEC 6): OPTIMIZATION LOOP
     loop=1
@@ -242,7 +242,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     denSld=[0]
     change=1000
 
-    f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi,actComp,actDsvb,allPhiDrv,denSld = comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
+    f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi,actComp,actDsvb,allPhiDrv,denSld, den = comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
     f0val_1=f0val.copy()
     f0val_2=f0val.copy()
     criteria=((f0val_2-f0val_1)/((abs(f0val_2)+abs(f0val_1))/2))*((f0val_1-f0val)/(abs(f0val_1)+abs(f0val))/2)
@@ -264,7 +264,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
             xmma,ymma,zmma,lam,xsi,eta,mu,zet,s,f0app,fapp = gcmmasub(m,nn,iter,epsimin,xval.reshape((xval.shape[0],1),order='F'),xmin,xmax,low,upp,raa0,raa,f0val,df0dx,fval,dfdx.T,a0,a,c,d)
             # The user should now calculate function values (no gradients) of the objective- and constraint
             # functions at the point xmma ( = the optimal solution of the subproblem).
-            f0valnew,fvalnew,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv, denSld = comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
+            f0valnew,fvalnew,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv, denSld, den = comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
 
             # It is checked if the approximations are conservative:
             print()
@@ -281,7 +281,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
                     xmma,ymma,zmma,lam,xsi,eta,mu,zet,s,f0app,fapp = gcmmasub(m,nn,iter,epsimin,xval,xmin,xmax,low,upp,raa0,raa,f0val,df0dx,fval,dfdx.T,a0,a,c,d)
                     # The user should now calculate function values (no gradients) of the objective- and 
                     # constraint functions at the point xmma ( = the optimal solution of the subproblem).
-                    f0valnew,fvalnew,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv,denSld = comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
+                    f0valnew,fvalnew,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv,denSld, den = comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
                     # It is checked if the approximations have become conservative:
                     conserv = concheck(m,epsimin,f0app,f0valnew,fapp,fvalnew)
                     
@@ -292,7 +292,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
         f0val_2=f0val_1.copy()
         f0val_1=f0val.copy()
         
-        f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi,actComp,actDsvb,allPhiDrv,denSld = comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
+        f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi,actComp,actDsvb,allPhiDrv,denSld, den = comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
         OBJ.append(f0val*scl)       # scaled objective function 
         CONS.append(fval + volfrac)             # volume constraint    
 
@@ -402,5 +402,5 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
             print(fval/volfrac)
             print("Volume fraction: ",fval," Desired: ",volfrac)
         loop+=1
-    return xval.squeeze(), f0val.squeeze(),loop+totalinner_it
+    return xval.squeeze(), f0val.squeeze(),loop+totalinner_it, H, Phimax, allPhi, den, N
 
