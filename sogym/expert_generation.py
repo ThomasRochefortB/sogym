@@ -31,7 +31,7 @@ def load_top (filepath):
     return dict
 
         
-def generate_mmc_solutions(key):
+def generate_mmc_solutions(key,dataset_folder):
     """
     This function generates a single solution for the mmc problem and saves it in the dataset folder
 
@@ -78,11 +78,11 @@ def generate_mmc_solutions(key):
     # Generate a timestamp with miliseconds for the filename:
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         # open a file for writing
-    with open('dataset/topologies/{}'.format(timestamp) +'.json', 'w') as f:
+    with open('{}/{}'.format(dataset_folder,timestamp) +'.json', 'w') as f:
         # write the dictionary to the file in JSON format
         json.dump(save_dict, f)
 
-def generate_dataset(num_threads=1, num_samples=10):
+def generate_dataset(dataset_folder, num_threads=1, num_samples=10):
     '''
     This function generates a dataset of solutions for the mmc problem and saves it in the dataset folder
 
@@ -93,7 +93,7 @@ def generate_dataset(num_threads=1, num_samples=10):
     if num_threads >1:
         nbrAvailCores=num_threads
         pool = mp.Pool(processes=nbrAvailCores)
-        resultsHandle = [pool.apply_async(generate_mmc_solutions, args=(z,)) for z in range(0,num_samples)]
+        resultsHandle = [pool.apply_async(generate_mmc_solutions, args=(z,dataset_folder)) for z in range(0,num_samples)]
         results = [r.get() for r in tqdm.tqdm(resultsHandle)]
         pool.close()
     else:
