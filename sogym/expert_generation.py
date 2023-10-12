@@ -12,6 +12,7 @@ import os
 import glob
 from sogym.struct import build_design
 from imitation.data.types import Trajectory
+from itertools import permutations
 
 # Let's load an expert sample:
 import json
@@ -160,45 +161,50 @@ def generate_trajectory(filepath):
     beta = np.concatenate((support_vector.flatten(order='F'),load_vector.flatten(order='F'),volfrac_vector,domain_vector),axis=None) # The new beta vector is a 25 x 1 vector
     
     components=np.split(np.array(design_variables),8)
-    action_count=0
-    volume=0
-    n_steps_left=1
-    out_design_variables=np.zeros((8*6,1))
-    variables_plot=[]
+    all_permutations = list(permutations(components))
+    for perm_idx, component_order in enumerate(all_permutations):
 
-    for single_component in components:
-        endpoints = find_endpoints(single_component[0],single_component[1],single_component[2],single_component[5])
-        # we add the two thicknesses to the numpy array:
-        endpoints=np.append(endpoints,single_component[3])
-        endpoints=np.append(endpoints,single_component[4])        
-        out_dict={
-            "design_variables":out_design_variables.tolist(),
-            "volume":volume,
-            "n_steps_left":n_steps_left,
-            "conditions":beta.tolist(),
-            "action":variables_2_actions(endpoints).tolist()
-        }
-        with open('dataset/trajectories/{}_{}.json'.format(filename,action_count), 'w') as fp:
-            json.dump(out_dict, fp)
-
-        variables_plot.append(single_component.squeeze())
-
-        # Replace the ith+6 values of out_design_variables with the single_component:
-        out_design_variables[action_count*6:(action_count+1)*6]=single_component.reshape((6,1))
-        action_count+=1
-        n_steps_left=(8-action_count)/8
-        #Get the volume after
-        H, Phimax,allPhi, den=build_design(np.array(variables_plot).T)
-        volume = sum(den)*env.EW*env.EH/(env.dx*env.dy)
     
-        final_out_dict={
-            "design_variables":out_design_variables.tolist(),
-            "volume":volume,
-            "n_steps_left":0,
-            "conditions":beta.tolist(),
-            "action":[]
-        }
-    with open('dataset/trajectories/{}_{}.json'.format(filename,8), 'w') as fp:
+        action_count=0
+        volume=0
+        n_steps_left=1
+        out_design_variables=np.zeros((8*6,1))
+        variables_plot=[]
+
+        for single_component in component_order:
+            endpoints = find_endpoints(single_component[0],single_component[1],single_component[2],single_component[5])
+            # we add the two thicknesses to the numpy array:
+            endpoints=np.append(endpoints,single_component[3])
+            endpoints=np.append(endpoints,single_component[4])        
+            out_dict={
+                "design_variables":out_design_variables.tolist(),
+                "volume":volume,
+                "n_steps_left":n_steps_left,
+                "conditions":beta.tolist(),
+                "action":variables_2_actions(endpoints).tolist()
+            }
+            with open('dataset/trajectories/{}_perm{}_{}.json'.format(filename, perm_idx, action_count), 'w') as fp:
+                json.dump(out_dict, fp)
+
+
+            variables_plot.append(single_component.squeeze())
+
+            # Replace the ith+6 values of out_design_variables with the single_component:
+            out_design_variables[action_count*6:(action_count+1)*6]=single_component.reshape((6,1))
+            action_count+=1
+            n_steps_left=(8-action_count)/8
+            #Get the volume after
+            H, Phimax,allPhi, den=build_design(np.array(variables_plot).T)
+            volume = sum(den)*env.EW*env.EH/(env.dx*env.dy)
+        
+            final_out_dict={
+                "design_variables":out_design_variables.tolist(),
+                "volume":volume,
+                "n_steps_left":0,
+                "conditions":beta.tolist(),
+                "action":[]
+            }
+        with open('dataset/trajectories/{}_perm{}_{}.json'.format(filename, perm_idx, 8), 'w') as fp:
             json.dump(final_out_dict, fp)
 
 
@@ -220,6 +226,17 @@ def list_unique_timestamps(folder='dataset/trajectories'):
     files_key=[file.split('/')[-1].split('_')[0] for file in files] 
     return list(set(files_key))
 
+import os
+
+def list_unique_permutations(timestamp):
+    # Extract all filenames that start with the timestamp from the trajectories directory
+    filenames = [f for f in os.listdir('dataset/trajectories') if f.startswith(timestamp)]
+    
+    # Extract unique permutation indices from the filenames
+    perm_indices = set([int(f.split('_perm')[1].split('_')[0]) for f in filenames])
+    
+    return list(perm_indices)
+
 def load_all_trajectories():
 
     # This function will load all the trajectories in the dataset/trajectories folder:
@@ -229,34 +246,80 @@ def load_all_trajectories():
     trajectories = []
 
     for timestamp in unique_timestamps:
-        observations = []
-        actions = []
-        infos = []
-        for i in range(9):
-            # Opening JSON file
-            f = open('dataset/trajectories/{}_{}.json'.format(timestamp,i))
-            data = json.load(f)
+        
+        # Get the unique permutation indices for each timestamp. 
+        # This assumes a utility function "list_unique_permutations" that extracts all unique permutation indices.
+        unique_permutations = list_unique_permutations(timestamp)  
 
-            obs = np.concatenate(( np.array(data['conditions']),
-                                np.array([data['volume']]),
-                                np.array([data['n_steps_left']]),
-                                np.array(data['design_variables']).squeeze(),
-            ))
-                                
-
-            acts = np.array(data['action'])
+        for perm_idx in unique_permutations:
             
-            observations.append(obs)
-            infos.append({})
-            
-            if acts != []:
-                actions.append(acts.squeeze())
+            observations = []
+            actions = []
+            infos = []
 
-            terminal = True
+            for i in range(9):
+                # Opening JSON file with the added permutation index
+                f = open('dataset/trajectories/{}_perm{}_{}.json'.format(timestamp, perm_idx, i))
+                data = json.load(f)
 
-        trajectories.append(Trajectory(obs=np.array(observations),acts=np.array(actions),terminal=terminal,infos=None))
+                obs = np.concatenate(( np.array(data['conditions']),
+                                    np.array([data['volume']]),
+                                    np.array([data['n_steps_left']]),
+                                    np.array(data['design_variables']).squeeze(),
+                ))
+                                    
+                acts = np.array(data['action'])
+                
+                observations.append(obs)
+                infos.append({})
+                
+                if acts != []:
+                    actions.append(acts.squeeze())
+
+                terminal = True
+
+            trajectories.append(Trajectory(obs=np.array(observations),acts=np.array(actions),terminal=terminal,infos=None))
 
     return trajectories
+
+
+# def load_all_trajectories():
+
+#     # This function will load all the trajectories in the dataset/trajectories folder:
+
+#     unique_timestamps = list_unique_timestamps()
+    
+#     trajectories = []
+
+#     for timestamp in unique_timestamps:
+#         observations = []
+#         actions = []
+#         infos = []
+#         for i in range(9):
+#             # Opening JSON file
+#             f = open('dataset/trajectories/{}_{}.json'.format(timestamp,i))
+#             data = json.load(f)
+
+#             obs = np.concatenate(( np.array(data['conditions']),
+#                                 np.array([data['volume']]),
+#                                 np.array([data['n_steps_left']]),
+#                                 np.array(data['design_variables']).squeeze(),
+#             ))
+                                
+
+#             acts = np.array(data['action'])
+            
+#             observations.append(obs)
+#             infos.append({})
+            
+#             if acts != []:
+#                 actions.append(acts.squeeze())
+
+#             terminal = True
+
+#         trajectories.append(Trajectory(obs=np.array(observations),acts=np.array(actions),terminal=terminal,infos=None))
+
+#     return trajectories
 
 
 

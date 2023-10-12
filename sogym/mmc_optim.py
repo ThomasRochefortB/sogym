@@ -10,7 +10,7 @@ from sogym.mma import mmasub,gcmmasub,asymp,concheck,raaupdate
 from sogym.struct import Ke_tril, Heaviside
 
 # Topology description function and derivatives
-def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb):
+def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilon):
     dd = xval[np.arange((i)*nEhcp,(i+1)*nEhcp)]
     x0 = dd[0]
     y0 = dd[1]
@@ -25,29 +25,37 @@ def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb):
     temp = (x1)**p/L**p + (y1)**p/l**p
     allPhi[:,i] = 1 - temp**(1/p)                                    # TDF of i-th component
     #switched the threshold for  np.mean(dd[3:5])/minSz from 0.1 to 0.2
-   # if np.mean(dd[3:5])/minSz > 0.5 and min(abs(allPhi[:,i])) < epsilon:
-    dx1 = np.array([-ct+0.0*x1, -st+0.0*x1, 0.0*x1, 0.0*x1, 0.0*x1, y1])        # variation of x'
-    dy1 = np.array([st+0.0*y1, -ct+0.0*y1, 0.0*y1, 0.0*y1, 0.0*y1, -x1])        # variation of y'
-    dldx1 = (t2-t1)/2/L
-    dldv1 = 0.0*l   #dldx0
-    dldv2 = 0.0*l   #dldy0
-    dldv6 = 0.0*l   #dldtheta               
-    dldv3 = - (t2-t1)/2*x1/L**2
-    dldv4 = 1/2 - x1/2/L
-    dldv5 = 1/2 + x1/2/L
-    dl = np.array([dldv1, dldv2, dldv3, dldv4, dldv5, dldv6]).T + np.multiply(np.matlib.repmat(dldx1,1,nEhcp),dx1.T);  # variation of width
-    dpdx1 = -(temp)**(1/p-1)*((x1/L)**(p-1)/L)                     # dphi/dx'
-    dpdx1=np.reshape(dpdx1,(dpdx1.shape[0],1))
-    dpdy1 = -(temp)**(1/p-1)*((y1/l)**(p-1)/l)                    # dphi/dy'
-    dpdy1 = np.reshape(dpdy1,(dpdy1.shape[0],1))
-    dpdL = 0.0*dx1.T
-    dpdL[:,2] = (temp)**(1/p-1)*(x1/L)**p/L    # [0 0 dphi/dl 0 0 0 0]         
-    dpdl = (temp)**(1/p-1)*((y1/l)**p/l)
-    dpdl = np.reshape(dpdl,(dpdl.shape[0],1))
-    operation = np.multiply(np.matlib.repmat(dpdx1,1,nEhcp),dx1.T) + np.multiply(np.matlib.repmat(dpdy1,1,nEhcp),dy1.T) + dpdL + np.multiply(np.matlib.repmat(dpdl,1,nEhcp),dl)
-    allPhidrv[:,np.arange((i)*nEhcp,(i+1)*nEhcp)] = operation
-    return [allPhi,allPhidrv,xval,actComp,actDsvb]
+    if np.mean(dd[3:5])/minSz > 0.1 and min(abs(allPhi[:,i])) < epsilon:
+        dx1 = np.array([-ct+0.0*x1, -st+0.0*x1, 0.0*x1, 0.0*x1, 0.0*x1, y1])        # variation of x'
+        dy1 = np.array([st+0.0*y1, -ct+0.0*y1, 0.0*y1, 0.0*y1, 0.0*y1, -x1])        # variation of y'
+        dldx1 = (t2-t1)/2/L
+        dldv1 = 0.0*l   #dldx0
+        dldv2 = 0.0*l   #dldy0
+        dldv6 = 0.0*l   #dldtheta               
+        dldv3 = - (t2-t1)/2*x1/L**2
+        dldv4 = 1/2 - x1/2/L
+        dldv5 = 1/2 + x1/2/L
+        dl = np.array([dldv1, dldv2, dldv3, dldv4, dldv5, dldv6]).T + np.multiply(np.matlib.repmat(dldx1,1,nEhcp),dx1.T);  # variation of width
+        dpdx1 = -(temp)**(1/p-1)*((x1/L)**(p-1)/L)                     # dphi/dx'
+        dpdx1=np.reshape(dpdx1,(dpdx1.shape[0],1))
+        dpdy1 = -(temp)**(1/p-1)*((y1/l)**(p-1)/l)                    # dphi/dy'
+        dpdy1 = np.reshape(dpdy1,(dpdy1.shape[0],1))
+        dpdL = 0.0*dx1.T
+        dpdL[:,2] = (temp)**(1/p-1)*(x1/L)**p/L    # [0 0 dphi/dl 0 0 0 0]         
+        dpdl = (temp)**(1/p-1)*((y1/l)**p/l)
+        dpdl = np.reshape(dpdl,(dpdl.shape[0],1))
+        operation = np.multiply(np.matlib.repmat(dpdx1,1,nEhcp),dx1.T) + np.multiply(np.matlib.repmat(dpdy1,1,nEhcp),dy1.T) + dpdL + np.multiply(np.matlib.repmat(dpdl,1,nEhcp),dl)
+        allPhidrv[:,np.arange((i)*nEhcp,(i+1)*nEhcp)] = operation
+    else:                 # deleting tiny componennp.spacing(1)t and removing it from active sets
+        print(['The {}-th component is too small! DELETE it!!!'.format(i)])   
+        allPhi[:,i] = -1e3
+        xval[(i)*nEhcp+3] = 0
+        xval[(i)*nEhcp+4] = 0
+        actComp = np.setdiff1d(actComp,i)
+        actDsvb = np.setdiff1d(actDsvb, np.arange(nEhcp*(i+1)-nEhcp, nEhcp*(i+1)))
 
+        #actDsvb = np.setdiff1d(actDsvb,nEhcp*i-np.r_[nEhcp+1:nEhcp*i])    
+    return [allPhi,allPhidrv,xval,actComp,actDsvb]
 
 
 def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probably need to add xmin and xmax
@@ -139,9 +147,8 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     xval = xval.reshape((xval.shape[0],1))
     xold1 = xval.copy()
     xold2 = xval.copy()
-    xmin=np.vstack((0.0, 0.0, 0.1, 0.02, 0.02, -np.pi))
-
-    xmax=np.vstack((dx, dy, 1.0, 0.1*min(dx,dy),0.1*min(dx,dy), np.pi))
+    xmin=np.vstack((0.0, 0.0, 0.0, 0.00, 0.00, -np.pi))
+    xmax=np.vstack((dx, dy, 0.75, 0.05*min(dx,dy),0.05*min(dx,dy), np.pi))
     xmin=np.matlib.repmat(xmin,N,1)
     xmax=np.matlib.repmat(xmax,N,1)
     low = xmin
@@ -152,7 +159,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     
         allPhiDrv=lil_matrix((nNod,nDsvb))
         for i in actComp:                      # calculating TDF of the active MMCs                                                    
-            allPhi,allPhiDrv,xval,actComp,actDsvb = calc_Phi(allPhi,allPhiDrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb)
+            allPhi,allPhiDrv,xval,actComp,actDsvb = calc_Phi(allPhi,allPhiDrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilon)
         allPhiAct = np.array(allPhi[:,actComp])                          # TDF matrix of active components
         temp = np.exp(lmd*allPhiAct)
         Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        # global TDF using K-S aggregation
@@ -181,7 +188,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     def comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld):
         allPhiDrv=lil_matrix((nNod,nDsvb))
         for i in actComp:                      # calculating TDF of the active MMCs                                                            
-            allPhi,allPhiDrv,xval,actComp,actDsvb = calc_Phi(allPhi,allPhiDrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb)
+            allPhi,allPhiDrv,xval,actComp,actDsvb = calc_Phi(allPhi,allPhiDrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilon)
         allPhiAct = np.array(allPhi[:,actComp])                          # TDF matrix of active components
         temp = np.exp(lmd*allPhiAct)
         Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        # global TDF using K-S aggregation
@@ -251,7 +258,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     while objVr5>1e-4 and loop<=maxiter:
         outeriter += 1
         criteria=((f0val_2-f0val_1)/((abs(f0val_2)+abs(f0val_1))/2))*((f0val_1-f0val)/(abs(f0val_1)+abs(f0val))/2)
-        if criteria>-0.00002 and criteria<0:
+        if criteria>-0.000002 and criteria<0:
             optimizer='GCMMA'  
 
         if optimizer=='MMA':
@@ -305,7 +312,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
             ax = plt.subplot(111)
             colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
             for i, color in zip(range(0,N), colors):
-                ax.contourf(x,y,np.flipud(allPhi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
+                ax.contourf(x,y,allPhi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors=color)
             
             # Add a rectangle to show the domain boundary:
             ax.add_patch(plt.Rectangle((0,0),dx, dy,
@@ -313,7 +320,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
             
             if BC_dict['selected_boundary']==0.0:  # Left boundary
                 # Add a blue rectangle to show the support 
-                ax.add_patch(plt.Rectangle(xy = (0.0,dy*(1.0-BC_dict['boundary_position']-BC_dict['boundary_length'])),
+                ax.add_patch(plt.Rectangle(xy = (0.0,dy*(BC_dict['boundary_position'])),
                                         width = BC_dict['boundary_length']*dy, 
                                         height = 0.1,
                                         angle = 90,
@@ -322,7 +329,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
                                             linewidth = 0))
 
                 for i in range(BC_dict['n_loads']):
-                    ax.arrow(dx-(BC_dict['magnitude_x'][i]*0.2),dy*(1-BC_dict['load_position'][i]),
+                    ax.arrow(dx-(BC_dict['magnitude_x'][i]*0.2),dy*(BC_dict['load_position'][i])-BC_dict['magnitude_y'][i]*0.2,
                                 dx= BC_dict['magnitude_x'][i]*0.2,
                                 dy = BC_dict['magnitude_y'][i]*0.2,
                                 width=0.2/8,
@@ -331,7 +338,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
                     
             elif BC_dict['selected_boundary']==0.25: # Right boundary
                 # Add a blue rectangle to show the support 
-                ax.add_patch(plt.Rectangle(xy = (dx+0.1,dy*(1.0-BC_dict['boundary_position']-BC_dict['boundary_length'])),
+                ax.add_patch(plt.Rectangle(xy = (dx+0.1,dy*(BC_dict['boundary_position'])),
                                         width = BC_dict['boundary_length']*dy, 
                                         height = 0.1,
                                         angle = 90,
@@ -340,13 +347,31 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
                                             linewidth = 0))
 
                 for i in range(BC_dict['n_loads']):
-                    ax.arrow(0.0-(BC_dict['magnitude_x'][i]*0.2),dy*(1-BC_dict['load_position'][i])-BC_dict['magnitude_y'][i]*0.2,
+                    ax.arrow(0.0-(BC_dict['magnitude_x'][i]*0.2),dy*(BC_dict['load_position'][i])-BC_dict['magnitude_y'][i]*0.2,
                                 dx= BC_dict['magnitude_x'][i]*0.2,
                                 dy = BC_dict['magnitude_y'][i]*0.2,
                                 width=0.2/8,
                                 length_includes_head=True,
                                 head_starts_at_zero=False)
             elif BC_dict['selected_boundary']==0.5: # Bottom boundary
+                # Add a blue rectangle to show the support 
+                ax.add_patch(plt.Rectangle(xy = (dx*BC_dict['boundary_position'],dy),
+                                        width = BC_dict['boundary_length']*dx, 
+                                        height = 0.1,
+                                        angle = 0.0,
+                                        hatch='/',
+                                            clip_on=False,
+                                            linewidth = 0))
+
+                for i in range(BC_dict['n_loads']):
+                    ax.arrow(dx*(BC_dict['load_position'][i])-BC_dict['magnitude_x'][i]*0.2,-(BC_dict['magnitude_y'][i]*0.2),
+                                dx= BC_dict['magnitude_x'][i]*0.2,
+                                dy = BC_dict['magnitude_y'][i]*0.2,
+                                width=0.2/8,
+                                length_includes_head=True,
+                                head_starts_at_zero=False)
+                    
+            elif BC_dict['selected_boundary']==0.75: # Top boundary
                 # Add a blue rectangle to show the support 
                 ax.add_patch(plt.Rectangle(xy = (dx*BC_dict['boundary_position'],-0.1),
                                         width = BC_dict['boundary_length']*dx, 
@@ -363,27 +388,10 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
                                 width=0.2/8,
                                 length_includes_head=True,
                                 head_starts_at_zero=False)
-                    
-            elif BC_dict['selected_boundary']==0.75: # Top boundary
-                # Add a blue rectangle to show the support 
-                ax.add_patch(plt.Rectangle(xy = (dx*BC_dict['boundary_position'],dy),
-                                        width = BC_dict['boundary_length']*dx, 
-                                        height = 0.1,
-                                        angle = 0.0,
-                                        hatch='/',
-                                            clip_on=False,
-                                            linewidth = 0))
-
-                for i in range(BC_dict['n_loads']):
-                    ax.arrow(dx*(BC_dict['load_position'][i])-BC_dict['magnitude_x'][i]*0.2,0.0-(BC_dict['magnitude_y'][i]*0.2),
-                                dx= BC_dict['magnitude_x'][i]*0.2,
-                                dy = BC_dict['magnitude_y'][i]*0.2,
-                                width=0.2/8,
-                                length_includes_head=True,
-                                head_starts_at_zero=False)
 
             display.display(plt.gcf())
             display.clear_output(wait=True)
+            plt.title(optimizer)
             plt.show() 
 
         if plotting== "component":

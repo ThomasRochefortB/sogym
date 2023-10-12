@@ -18,7 +18,7 @@ def gen_randombc(seed):
     # Step 1: Select external boundary
     boundaries = ['left', 'right', 'bottom', 'top']
     selected_boundary = np.random.choice(boundaries)
-    support_type = ['fully', 'simple']
+    support_type = ['fully'] #, 'simple']
     selected_type = np.random.choice(support_type)
     
     # Step 2: Select fully-supported boundary length and position
@@ -29,7 +29,7 @@ def gen_randombc(seed):
 
 
     # Select a random number of loads between 1 and 3:
-    n_loads = np.random.randint(1,4)
+    n_loads = np.random.randint(1,2)
     # Step 3: Select the degrees of freedom that are affected by the boundary condition:
     nodes_matrix = np.zeros((nely+1, nelx+1))
     if selected_boundary == 'left':
@@ -69,7 +69,7 @@ def gen_randombc(seed):
         while len(np.unique(load_position)) != n_loads:
             load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)
     else:
-        while len(np.unique(load_position)) != n_loads or np.min(np.abs(np.subtract.outer(load_position,load_position))[np.triu_indices(n_loads,1)]) < 0.05:
+        while len(np.unique(load_position)) != n_loads or np.min(np.abs(np.subtract.outer(load_position,load_position))[np.triu_indices(n_loads,1)]) < 0.1:
             load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)
 
         

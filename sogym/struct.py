@@ -25,7 +25,7 @@ def Ke_tril(E,nu,a,b,h):
 
 
 @numba.njit
-def calc_Phi(variable, LSgrid, p, nEhcp):
+def calc_Phi(variable, LSgrid, p):
     x0 = variable[0,:]
     y0 = variable[1,:]
     L = variable[2,:] + np.spacing(1)
@@ -126,10 +126,7 @@ def build_design(variable,DW=2.0,DH=1.0,nelx=100,nely=50):
     alpha=1e-9 
     epsilon=0.2
     N=variable.shape[1]
-    actComp = np.arange(0,N)               
-    nEhcp = 6 
     nNod = (nelx+1)*(nely+1)
-    
     allPhi = np.zeros((nNod,N))   
     x,y=np.meshgrid(np.linspace(0, DW,nelx+1),np.linspace(0,DH,nely+1))
     LSgrid=np.array([x.flatten(order='F'),y.flatten(order='F')])
@@ -138,7 +135,7 @@ def build_design(variable,DW=2.0,DH=1.0,nelx=100,nely=50):
     edofMat = edofVec + np.array([0, 1, 2*nely+2,2*nely+3, 2*nely+4, 2*nely+5, 2, 3])             
     eleNodesID = edofMat[:,0:8:2]//2   
     
-    allPhi = calc_Phi(variable, LSgrid, p, nEhcp)
+    allPhi = calc_Phi(variable, LSgrid, p)
     temp = np.exp(lmd*allPhi)
     temp = np.where(temp==0,1e-08,temp)
     Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        

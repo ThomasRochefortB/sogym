@@ -90,10 +90,10 @@ def mmasub(m,n,iter,xval,xmin,xmax,xold1,xold2,f0val,df0dx,fval,dfdx,low,upp,a0,
     
     epsimin = 1e-09
     raa0 = 0.01
-    albefa = 0.4
+    albefa = 0.8
     asyinit = 0.05
-    asyincr = 0.8
-    asydecr = 0.6
+    asyincr = 1.0
+    asydecr = 0.8
     eeen = np.ones((n, 1))
     eeem = np.ones((m, 1))
     zeron = np.zeros((n, 1))

@@ -73,7 +73,6 @@ class sogym(gym.Env):
 
     def reset(self,start_dict=None):
         
-        
         if self.mode == 'test':
             self.counter+=1
             self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.counter)
@@ -94,7 +93,7 @@ class sogym(gym.Env):
         self.EW=self.dx / self.nelx # length of element
         self.EH=self.dy/ self.nely # width of element     
         self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
-        self.xmax=np.vstack((self.dx, self.dy, self.dx, self.dy, 0.2, 0.2)) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
+        self.xmax=np.vstack((self.dx, self.dy, self.dx, self.dy, 0.05*min(self.dx,self.dy),0.05*min(self.dx,self.dy))) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
         self.x,self.y=np.meshgrid(np.linspace(0, self.dx,self.nelx+1),np.linspace(0,self.dy,self.nely+1))                # coordinates of nodal points
         self.variables_plot=[]
 
@@ -281,14 +280,14 @@ class sogym(gym.Env):
         ax = plt.subplot(111)
         if train_viz:
             for i, color in zip(range(0,self.last_Phi.shape[1]), self.render_colors):
-                ax.contourf(x,y,np.flipud(self.last_Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
+                ax.contourf(x,y,self.last_Phi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors=color)
         else:
             if self.variables_plot==[]:
                  for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
-                    ax.contourf(x,y,np.flipud(self.Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors='white')
+                    ax.contourf(x,y,self.Phi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors='white')
             else:
                 for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
-                    ax.contourf(x,y,np.flipud(self.Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
+                    ax.contourf(x,y,self.Phi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors=color)
                     
             
                     # Add a rectangle to show the domain boundary:
@@ -297,7 +296,7 @@ class sogym(gym.Env):
         
         if condition_dict['selected_boundary']==0.0:  # Left boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (0.0,dy*(1.0-condition_dict['boundary_position']-condition_dict['boundary_length'])),
+            ax.add_patch(plt.Rectangle(xy = (0.0,dy*(condition_dict['boundary_position'])),
                                     width = condition_dict['boundary_length']*dy, 
                                     height = 0.1,
                                     angle = 90,
@@ -306,7 +305,7 @@ class sogym(gym.Env):
                                         linewidth = 0))
 
             for i in range(condition_dict['n_loads']):
-                ax.arrow(dx-(condition_dict['magnitude_x'][i]*0.2),dy*(1-condition_dict['load_position'][i]),
+                ax.arrow(dx-(condition_dict['magnitude_x'][i]*0.2),dy*(condition_dict['load_position'][i])-condition_dict['magnitude_y'][i]*0.2,
                             dx= condition_dict['magnitude_x'][i]*0.2,
                             dy = condition_dict['magnitude_y'][i]*0.2,
                             width=0.2/8,
@@ -315,7 +314,7 @@ class sogym(gym.Env):
                 
         elif condition_dict['selected_boundary']==0.25: # Right boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (dx+0.1,dy*(1.0-condition_dict['boundary_position']-condition_dict['boundary_length'])),
+            ax.add_patch(plt.Rectangle(xy = (dx+0.1,dy*(condition_dict['boundary_position'])),
                                     width = condition_dict['boundary_length']*dy, 
                                     height = 0.1,
                                     angle = 90,
@@ -324,7 +323,7 @@ class sogym(gym.Env):
                                         linewidth = 0))
 
             for i in range(condition_dict['n_loads']):
-                ax.arrow(0.0-(condition_dict['magnitude_x'][i]*0.2),dy*(1-condition_dict['load_position'][i])-condition_dict['magnitude_y'][i]*0.2,
+                ax.arrow(0.0-(condition_dict['magnitude_x'][i]*0.2),dy*(condition_dict['load_position'][i])-condition_dict['magnitude_y'][i]*0.2,
                             dx= condition_dict['magnitude_x'][i]*0.2,
                             dy = condition_dict['magnitude_y'][i]*0.2,
                             width=0.2/8,
@@ -332,7 +331,7 @@ class sogym(gym.Env):
                             head_starts_at_zero=False)
         elif condition_dict['selected_boundary']==0.5: # Bottom boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (dx*self.conditions['boundary_position'],-0.1),
+            ax.add_patch(plt.Rectangle(xy = (dx*self.conditions['boundary_position'],dy),
                                     width = self.conditions['boundary_length']*self.dx, 
                                     height = 0.1,
                                     angle = 0.0,
@@ -341,7 +340,7 @@ class sogym(gym.Env):
                                         linewidth = 0))
 
             for i in range(condition_dict['n_loads']):
-                ax.arrow(dx*(condition_dict['load_position'][i])-condition_dict['magnitude_x'][i]*0.2,dy-(condition_dict['magnitude_y'][i]*0.2),
+                ax.arrow(dx*(condition_dict['load_position'][i])-condition_dict['magnitude_x'][i]*0.2,-(condition_dict['magnitude_y'][i]*0.2),
                             dx= condition_dict['magnitude_x'][i]*0.2,
                             dy = condition_dict['magnitude_y'][i]*0.2,
                             width=0.2/8,
@@ -350,7 +349,7 @@ class sogym(gym.Env):
                 
         elif condition_dict['selected_boundary']==0.75: # Top boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (dx*condition_dict['boundary_position'],dy),
+            ax.add_patch(plt.Rectangle(xy = (dx*condition_dict['boundary_position'],-0.1),
                                     width = condition_dict['boundary_length']*dx, 
                                     height = 0.1,
                                     angle = 0.0,
@@ -359,7 +358,7 @@ class sogym(gym.Env):
                                         linewidth = 0))
 
             for i in range(condition_dict['n_loads']):
-                ax.arrow(dx*(condition_dict['load_position'][i])-condition_dict['magnitude_x'][i]*0.2,0.0-(condition_dict['magnitude_y'][i]*0.2),
+                ax.arrow(dx*(condition_dict['load_position'][i])-condition_dict['magnitude_x'][i]*0.2,dy-(condition_dict['magnitude_y'][i]*0.2),
                             dx= condition_dict['magnitude_x'][i]*0.2,
                             dy = condition_dict['magnitude_y'][i]*0.2,
                             width=0.2/8,
