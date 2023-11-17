@@ -290,9 +290,8 @@ class sogym(gym.Env):
                     ax.contourf(x,y,self.Phi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors=color)
                     
             
-                    # Add a rectangle to show the domain boundary:
-        ax.add_patch(plt.Rectangle((0,0),dx, dy,
-                                    clip_on=False,linewidth = 10,fill=False))
+        # Add a rectangle to show the domain boundary:
+        ax.add_patch(plt.Rectangle((0,0),dx, dy,clip_on=False,linewidth = 1,fill=False))
         
         if condition_dict['selected_boundary']==0.0:  # Left boundary
             # Add a blue rectangle to show the support 

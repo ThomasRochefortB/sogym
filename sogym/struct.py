@@ -124,7 +124,7 @@ def build_design(variable,DW=2.0,DH=1.0,nelx=100,nely=50):
     nEle = nelx*nely             
     p=6
     alpha=1e-9 
-    epsilon=0.2
+    epsilon=0.3
     N=variable.shape[1]
     nNod = (nelx+1)*(nely+1)
     allPhi = np.zeros((nNod,N))   

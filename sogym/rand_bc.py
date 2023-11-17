@@ -1,5 +1,19 @@
 import numpy as np
 import random
+
+def calculate_support_orientation(selected_boundary):
+    if selected_boundary == 'left' or selected_boundary == 'right':
+        return 0  # Primary orientation for left and right is 0 degrees
+    elif selected_boundary == 'bottom':
+        return 270  # Primary orientation for bottom is 270 degrees
+    elif selected_boundary == 'top':
+        return 90  # Primary orientation for top is 90 degrees
+
+def filter_load_orientations(support_orientation):
+    valid_orientations = [i for i in range(0, 360, 15)]
+    exclude_range = [(support_orientation + angle) % 360 for angle in range(-45, 46)]
+    exclude_range += [(support_orientation + 180 + angle) % 360 for angle in range(-45, 46)]
+    return [o for o in valid_orientations if o not in exclude_range]
 def gen_randombc(seed):
     
     random.seed(seed)
@@ -15,7 +29,7 @@ def gen_randombc(seed):
     # Sample the desired volume fraction between 0.2 and 0.4
     volume_fraction = np.round(np.random.uniform(0.2,0.4),2)
 
-    # Step 1: Select external boundary
+    # Step 1: Select external boundary that will be supported and the type of support chosen:
     boundaries = ['left', 'right', 'bottom', 'top']
     selected_boundary = np.random.choice(boundaries)
     support_type = ['fully'] #, 'simple']
@@ -28,8 +42,9 @@ def gen_randombc(seed):
     boundary_position = np.round(boundary_position,2)
 
 
-    # Select a random number of loads between 1 and 3:
-    n_loads = np.random.randint(1,2)
+    # Select a random number of loads between 1 and 2:
+    # n_loads = np.random.randint(1,4)
+    n_loads = 1
     # Step 3: Select the degrees of freedom that are affected by the boundary condition:
     nodes_matrix = np.zeros((nely+1, nelx+1))
     if selected_boundary == 'left':
@@ -64,7 +79,7 @@ def gen_randombc(seed):
 
 
     # Generate n_loads random position for each load and ensure they are different:
-    load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)
+    load_position = np.round(np.random.uniform(0, 0.0,size=n_loads),2)
     if n_loads==1:
         while len(np.unique(load_position)) != n_loads:
             load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)
@@ -74,8 +89,11 @@ def gen_randombc(seed):
 
         
     if selected_type == 'fully':
-        # Select a random orientation for the load:
-        load_orientation = np.random.choice([0,15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240,255,270,285,300,315,330,345],size=n_loads)
+        # Select a random orientation for the load(s):
+        # In your gen_randombc function:
+        support_orientation = calculate_support_orientation(selected_boundary)
+        valid_load_orientations = filter_load_orientations(support_orientation)
+        load_orientation = np.random.choice(valid_load_orientations, size=n_loads)
         magnitude_x = np.cos(np.radians(load_orientation))
         magnitude_y = np.sin(np.radians(load_orientation))
 

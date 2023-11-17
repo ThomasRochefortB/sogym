@@ -25,7 +25,7 @@ def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilo
     temp = (x1)**p/L**p + (y1)**p/l**p
     allPhi[:,i] = 1 - temp**(1/p)                                    # TDF of i-th component
     #switched the threshold for  np.mean(dd[3:5])/minSz from 0.1 to 0.2
-    if np.mean(dd[3:5])/minSz > 0.1 and min(abs(allPhi[:,i])) < epsilon:
+    if np.min(dd[3:5])/minSz > 0.2 and min(abs(allPhi[:,i])) < epsilon and dd[2] > minSz:
         dx1 = np.array([-ct+0.0*x1, -st+0.0*x1, 0.0*x1, 0.0*x1, 0.0*x1, y1])        # variation of x'
         dy1 = np.array([st+0.0*y1, -ct+0.0*y1, 0.0*y1, 0.0*y1, 0.0*y1, -x1])        # variation of y'
         dldx1 = (t2-t1)/2/L
@@ -53,15 +53,13 @@ def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilo
         xval[(i)*nEhcp+4] = 0
         actComp = np.setdiff1d(actComp,i)
         actDsvb = np.setdiff1d(actDsvb, np.arange(nEhcp*(i+1)-nEhcp, nEhcp*(i+1)))
-
-        #actDsvb = np.setdiff1d(actDsvb,nEhcp*i-np.r_[nEhcp+1:nEhcp*i])    
     return [allPhi,allPhidrv,xval,actComp,actDsvb]
 
 
 def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probably need to add xmin and xmax
     xInt = 0.25*dx
     yInt = 0.25*dy
-    vInt = [0.4, 0.05, 0.05, np.arcsin(0.7)]
+    vInt = [0.4*min(dx,dy), 0.05, 0.05, np.arcsin(0.7)]
     E = 1.0 #Young's modulus
     nu = 0.3 #Poisson ratio
     h = 1 #thickness                              
@@ -80,7 +78,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     EW = dy/nely                  # width of finite elements
     minSz = min([EL,EW])*3          # minimum size of finite elements
     alpha = 1e-9                  # void density
-    epsilon = 0.2             # regularization term in Heaviside (default 0.2)
+    epsilon = 0.3            # regularization term in Heaviside (default 0.2)
     Ke = Ke_tril(E,nu,EL,EW,h)  # non-zero upper triangular of ele. stiffness 
     KE=np.tril(np.ones(8)).flatten(order='F')
     KE[KE==1] = Ke.T
@@ -117,8 +115,8 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     
     
     #  4): INITIAL SETTING OF COMPONENTS
-    x0=np.arange(xInt, dx, 2*xInt)# x-coordinates of the centers of components
-    y0 = np.arange(yInt,dy,2*yInt)               # coordinates of initial components' center
+    x0 = np.arange(xInt, dx, 2*xInt)# x-coordinates of the centers of components
+    y0 = np.arange(yInt, dy, 2*yInt)               # coordinates of initial components' center
     xn = len(x0)
     yn = len(y0)                   # num. of component along x                
     x0=np.kron(x0,np.ones((1,2*yn)))
@@ -236,7 +234,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     # SEC 6): OPTIMIZATION LOOP
     loop=1
     totalinner_it=0
-    maxinnerinit=1
+    maxinnerinit=2
     OBJ=[]
     CONS=[]
     outeriter=0
@@ -310,7 +308,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
 
             fig = plt.figure()
             ax = plt.subplot(111)
-            colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
+            colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']*10
             for i, color in zip(range(0,N), colors):
                 ax.contourf(x,y,allPhi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors=color)
             
