@@ -14,7 +14,7 @@ def filter_load_orientations(support_orientation):
     exclude_range = [(support_orientation + angle) % 360 for angle in range(-45, 46)]
     exclude_range += [(support_orientation + 180 + angle) % 360 for angle in range(-45, 46)]
     return [o for o in valid_orientations if o not in exclude_range]
-def gen_randombc(seed):
+def gen_randombc(seed,resolution=100):
     
     random.seed(seed)
     np.random.seed(seed)
@@ -23,8 +23,8 @@ def gen_randombc(seed):
     dy = np.round(np.random.uniform(1.0,2.0),1)
 
     # The resolution of the mesh will implement a fixed element size of 0.01 (100 elements per 1.0 unit)
-    nelx = int(50 * dx)
-    nely = int(50 * dy)
+    nelx = int(resolution * dx)
+    nely = int(resolution * dy)
 
     # Sample the desired volume fraction between 0.2 and 0.4
     volume_fraction = np.round(np.random.uniform(0.2,0.4),2)
