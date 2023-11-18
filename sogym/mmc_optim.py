@@ -146,7 +146,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     xold1 = xval.copy()
     xold2 = xval.copy()
     xmin=np.vstack((0.0, 0.0, 0.0, 0.00, 0.00, -np.pi))
-    xmax=np.vstack((dx, dy, 0.75, 0.05*min(dx,dy),0.05*min(dx,dy), np.pi))
+    xmax=np.vstack((dx, dy, 0.75, 0.02*min(dx,dy),0.02*min(dx,dy), np.pi))
     xmin=np.matlib.repmat(xmin,N,1)
     xmax=np.matlib.repmat(xmax,N,1)
     low = xmin
@@ -234,7 +234,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     # SEC 6): OPTIMIZATION LOOP
     loop=1
     totalinner_it=0
-    maxinnerinit=2
+    maxinnerinit=1
     OBJ=[]
     CONS=[]
     outeriter=0
@@ -256,11 +256,11 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     while objVr5>1e-4 and loop<=maxiter:
         outeriter += 1
         criteria=((f0val_2-f0val_1)/((abs(f0val_2)+abs(f0val_1))/2))*((f0val_1-f0val)/(abs(f0val_1)+abs(f0val))/2)
-        if criteria>-0.000002 and criteria<0:
+        if criteria>-0.0000002 and criteria<0:
             optimizer='GCMMA'  
 
         if optimizer=='MMA':
-            xmma,_,_,_,_,_,_,_,_,low,upp = mmasub(m,nDsvb,loop,xval.reshape((xval.shape[0],1),order='F'),xmin,xmax,xold1,xold2,f0val,df0dx,fval,dfdx,low,upp,a0,a,c,d,move=0.5)
+            xmma,_,_,_,_,_,_,_,_,low,upp = mmasub(m,nDsvb,loop,xval.reshape((xval.shape[0],1),order='F'),xmin,xmax,xold1,xold2,f0val,df0dx,fval,dfdx,low,upp,a0,a,c,d,move=1.0)
 
         if optimizer=='GCMMA':
             # The parameters low, upp, raa0 and raa are calculated:
