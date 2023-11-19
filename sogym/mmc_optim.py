@@ -25,7 +25,7 @@ def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilo
     temp = (x1)**p/L**p + (y1)**p/l**p
     allPhi[:,i] = 1 - temp**(1/p)                                    # TDF of i-th component
     #switched the threshold for  np.mean(dd[3:5])/minSz from 0.1 to 0.2
-    if np.min(dd[3:5])/minSz > 0.2 and min(abs(allPhi[:,i])) < epsilon and dd[2] > minSz:
+    if np.min(dd[3:5])/minSz > 0.1 and min(abs(allPhi[:,i])) < epsilon: #and dd[2] > minSz:
         dx1 = np.array([-ct+0.0*x1, -st+0.0*x1, 0.0*x1, 0.0*x1, 0.0*x1, y1])        # variation of x'
         dy1 = np.array([st+0.0*y1, -ct+0.0*y1, 0.0*y1, 0.0*y1, 0.0*y1, -x1])        # variation of y'
         dldx1 = (t2-t1)/2/L
@@ -57,17 +57,17 @@ def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilo
 
 
 def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probably need to add xmin and xmax
-    xInt = 0.25*dx
-    yInt = 0.25*dy
-    vInt = [0.4*min(dx,dy), 0.05, 0.05, np.arcsin(0.7)]
+    xInt = 0.165*dx  #0.125 for 8 x 8, 0.165 for 3x3, 0.25 for 2x2
+    yInt = 0.165*dy
+    vInt = [0.3*min(dx,dy), 0.03, 0.03, np.arcsin(0.7)]
     E = 1.0 #Young's modulus
     nu = 0.3 #Poisson ratio
     h = 1 #thickness                              
     dgt0 = 5 #significant digit of sens.
-    scl = 1  #scale factor for obj                                           
+    scl = 1 #scale factor for obj                                           
     p = 6   #power of super ellipsoid
     lmd = 100    #power of KS aggregation   (default 100)                                   
-    maxiter = 1000 # maximum number of iterations                                       
+    maxiter = 500 # maximum number of iterations                                       
     objVr5 = 1.0  # initial relative variat. of obj. last 5 iterations
 
     ## Setting of FE discretization
@@ -78,7 +78,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     EW = dy/nely                  # width of finite elements
     minSz = min([EL,EW])*3          # minimum size of finite elements
     alpha = 1e-9                  # void density
-    epsilon = 0.3            # regularization term in Heaviside (default 0.2)
+    epsilon = 0.2            # regularization term in Heaviside (default 0.2)
     Ke = Ke_tril(E,nu,EL,EW,h)  # non-zero upper triangular of ele. stiffness 
     KE=np.tril(np.ones(8)).flatten(order='F')
     KE[KE==1] = Ke.T
@@ -146,7 +146,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     xold1 = xval.copy()
     xold2 = xval.copy()
     xmin=np.vstack((0.0, 0.0, 0.0, 0.00, 0.00, -np.pi))
-    xmax=np.vstack((dx, dy, 0.75, 0.02*min(dx,dy),0.02*min(dx,dy), np.pi))
+    xmax=np.vstack((dx, dy, 0.7*min(dx,dy), 0.05*min(dx,dy),0.05*min(dx,dy), np.pi))
     xmin=np.matlib.repmat(xmin,N,1)
     xmax=np.matlib.repmat(xmax,N,1)
     low = xmin
@@ -160,6 +160,8 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
             allPhi,allPhiDrv,xval,actComp,actDsvb = calc_Phi(allPhi,allPhiDrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilon)
         allPhiAct = np.array(allPhi[:,actComp])                          # TDF matrix of active components
         temp = np.exp(lmd*allPhiAct)
+        # temp = np.where(temp==0,1e-08,temp)
+
         Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        # global TDF using K-S aggregation
         allPhiDrvAct = allPhiDrv[:,actDsvb]
 
@@ -189,6 +191,8 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
             allPhi,allPhiDrv,xval,actComp,actDsvb = calc_Phi(allPhi,allPhiDrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilon)
         allPhiAct = np.array(allPhi[:,actComp])                          # TDF matrix of active components
         temp = np.exp(lmd*allPhiAct)
+        # temp = np.where(temp==0,1e-08,temp)
+
         Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        # global TDF using K-S aggregation
         allPhiDrvAct = allPhiDrv[:,actDsvb]
 
@@ -256,7 +260,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     while objVr5>1e-4 and loop<=maxiter:
         outeriter += 1
         criteria=((f0val_2-f0val_1)/((abs(f0val_2)+abs(f0val_1))/2))*((f0val_1-f0val)/(abs(f0val_1)+abs(f0val))/2)
-        if criteria>-0.0000002 and criteria<0:
+        if criteria>-0.000002 and criteria<0:
             optimizer='GCMMA'  
 
         if optimizer=='MMA':
@@ -389,7 +393,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
 
             display.display(plt.gcf())
             display.clear_output(wait=True)
-            plt.title(optimizer)
+            plt.title(str(loop)+optimizer+str(objVr5))
             plt.show() 
 
         if plotting== "component":
@@ -399,7 +403,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
             display.clear_output(wait=True)
             plt.show()
         
-        if loop>=15 and (fval/volfrac)<5e-4:
+        if loop>=15 and (fval/volfrac)<1e-2:
             objVr5 = abs(max(abs(OBJ[-15:] - np.mean(OBJ[-15:]))) / np.mean(OBJ[-15:]))
         
         if verbose != 0:

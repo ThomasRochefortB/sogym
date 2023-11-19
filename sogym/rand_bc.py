@@ -21,13 +21,12 @@ def gen_randombc(seed,resolution=100):
     # dx and dy will be sampled from a uniform distribution between 1.0 and 2.0. The number will only have one digit (ex: 1.1,1.2, ...)
     dx = np.round(np.random.uniform(1.0,2.0),1)
     dy = np.round(np.random.uniform(1.0,2.0),1)
-
     # The resolution of the mesh will implement a fixed element size of 0.01 (100 elements per 1.0 unit)
     nelx = int(resolution * dx)
     nely = int(resolution * dy)
 
     # Sample the desired volume fraction between 0.2 and 0.4
-    volume_fraction = np.round(np.random.uniform(0.2,0.4),2)
+    volume_fraction = np.round(np.random.uniform(0.3,0.5),2)
 
     # Step 1: Select external boundary that will be supported and the type of support chosen:
     boundaries = ['left', 'right', 'bottom', 'top']
@@ -36,7 +35,7 @@ def gen_randombc(seed,resolution=100):
     selected_type = np.random.choice(support_type)
     
     # Step 2: Select fully-supported boundary length and position
-    boundary_length = np.random.uniform(0.25, 0.75) * nely if selected_boundary in ['left', 'right'] else np.random.uniform(0.25, 0.75) * nelx
+    boundary_length = np.random.uniform(0.5, 0.75) * nely if selected_boundary in ['left', 'right'] else np.random.uniform(0.5, 0.75) * nelx
     boundary_position = np.random.uniform(0, 1-(boundary_length/nely)) if selected_boundary in ['left', 'right'] else np.random.uniform(0, 1-(boundary_length/nelx))
     boundary_length = np.round(boundary_length)
     boundary_position = np.round(boundary_position,2)
