@@ -133,5 +133,5 @@ env/.ipynb_checkpoints/*
 env_saved.pkl
 model_saved.zip
 
-dataset/trajectories/
-dataset/topologies/
+dataset/
+
