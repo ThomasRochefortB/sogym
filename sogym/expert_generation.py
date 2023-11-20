@@ -1,6 +1,7 @@
-
-from sogym.env import sogym
 from sogym.mmc_optim import run_mmc
+from sogym.simp_optim import run_simp
+from sogym.env import sogym
+
 import datetime
 import os
 import json
@@ -16,6 +17,37 @@ from itertools import permutations
 
 # Let's load an expert sample:
 import json
+
+import matplotlib.pyplot as plt
+import random
+
+def plot_10_random_simp():
+    # I want to plot 10 plots by reading 10 random jsons in .dataset/topologies/simp
+    # Then, the key 'design_variables'  and plt.imshow:
+
+    # Let's get the list of available files in the simp folder:
+    simp_folder = './dataset/topologies/simp/'
+    available_files = os.listdir(simp_folder)
+
+    # Let's plot 10 random topologies from the simp folder:
+    topologies = []
+    for i in range(10):
+        if len(available_files) == 0:
+            break
+        selected_file = random.choice(available_files)
+        topologies.append(selected_file)
+        available_files.remove(selected_file)
+
+    # Let's plot the topologies:
+    fig, axs = plt.subplots(2, 5, figsize=(20, 10))
+    axs = axs.flatten()
+    for i, topology in enumerate(topologies):
+        with open(simp_folder + topology) as f:
+            data = json.load(f)
+        axs[i].imshow(data['design_variables'], origin='lower', cmap='Greys')
+        axs[i].set_title(topology)
+
+
 def count_top (filepath):
     #function to count the number of .json in the /dataset folder:
     path, dirs, files = next(os.walk(filepath))
@@ -41,12 +73,10 @@ def generate_mmc_solutions(key,dataset_folder):
 
     Returns:
         None: The function saves the solution in the dataset folder
-
     """
-    env = sogym(mode='train',observation_type='dense',vol_constraint_type='soft',seed=key)
-    obs = env.reset()
-    xval, f0val, num_iter, H, Phimax, allPhi, den,N=  run_mmc(env.conditions,env.nelx,env.nely,env.dx,env.dy,plotting='nothing',verbose=0)
-    #out_conditions = train_env.conditions.copy()
+    env = sogym(mode='train',observation_type='dense',vol_constraint_type='soft',seed=key,resolution=75)
+    _ = env.reset()
+    xval, f0val, num_iter, H, Phimax, allPhi, den, N, cfg=  run_mmc(env.conditions,env.nelx,env.nely,env.dx,env.dy,plotting='nothing',verbose=0)
     out_conditions = env.conditions.copy()
 
     # train_env.conditions contains numpy arrays that I cant save in the json file. I need to convert them to lists
@@ -73,7 +103,7 @@ def generate_mmc_solutions(key,dataset_folder):
         'phimax':Phimax.tolist(),
         'phi':allPhi.tolist(),
         'den':den.tolist(),
-        'extra': "Optimal topologies, maxiter=1000"
+        'cfg':cfg
     }
 
     # Generate a timestamp with miliseconds for the filename:
@@ -83,7 +113,52 @@ def generate_mmc_solutions(key,dataset_folder):
         # write the dictionary to the file in JSON format
         json.dump(save_dict, f)
 
-def generate_dataset(dataset_folder, num_threads=1, num_samples=10):
+def generate_simp_solutions(key,dataset_folder="./dataset/topologies/simp",resolution=150):
+    """
+    This function generates a single solution for the mmc problem and saves it in the dataset folder
+
+    Args:
+        key (int): The key for the multiprocessing
+
+    Returns:
+        None: The function saves the solution in the dataset folder
+
+    """
+    env = sogym(mode='train',seed=key,resolution=resolution)
+    _ = env.reset()
+    simp_variables, f0val, num_iter, cfg=  run_simp(env.nelx,env.nely,env.conditions,penal=3.0,rmin=3,ft=1,verbose=0)
+    out_conditions = env.conditions.copy()
+
+    # train_env.conditions contains numpy arrays that I cant save in the json file. I need to convert them to lists
+    for dict_key in out_conditions.keys():
+        if type(out_conditions[dict_key]) is np.ndarray:
+            out_conditions[dict_key] = out_conditions[dict_key].tolist()
+            # convert also the internals of the key in case I have arrays of arrays:
+        if  type(out_conditions[dict_key]) is list and type(out_conditions[dict_key][0]) is np.ndarray:
+            out_conditions[dict_key] = [float(x[0])for x in out_conditions[dict_key]]
+        # Convert all of the int64 to floats:
+    # Generate a dictionary to save the json with the following keys:
+    
+    save_dict={
+        'boundary_conditions':out_conditions,
+        'compliance':f0val.tolist(),
+        'num_iter':float(num_iter),
+        'design_variables':simp_variables.tolist(),
+        'dx': env.dx,
+        'dy': env.dy,
+        'nelx': env.nelx,
+        'nely': env.nely,
+        'cfg':cfg
+    }
+
+    # Generate a timestamp with miliseconds for the filename:
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        # open a file for writing
+    with open('{}/{}'.format(dataset_folder,timestamp) +'.json', 'w') as f:
+        # write the dictionary to the file in JSON format
+        json.dump(save_dict, f)
+
+def generate_dataset(dataset_folder, method= 'mmc', num_threads=1, num_samples=10):
     '''
     This function generates a dataset of solutions for the mmc problem and saves it in the dataset folder
 
@@ -94,14 +169,16 @@ def generate_dataset(dataset_folder, num_threads=1, num_samples=10):
     if num_threads >1:
         nbrAvailCores=num_threads
         pool = mp.Pool(processes=nbrAvailCores)
-        resultsHandle = [pool.apply_async(generate_mmc_solutions, args=(z,dataset_folder)) for z in range(0,num_samples)]
+        if method =='mmc':
+            resultsHandle = [pool.apply_async(generate_mmc_solutions, args=(z,dataset_folder)) for z in range(0,num_samples)]
+        elif method =='simp':
+            resultsHandle = [pool.apply_async(generate_simp_solutions, args=(z,dataset_folder)) for z in range(0,num_samples)]
         results = [r.get() for r in tqdm.tqdm(resultsHandle)]
         pool.close()
     else:
 
         for i in tqdm.tqdm(range(num_samples)):
             generate_mmc_solutions(i)
-
 
 
 def generate_trajectory(filepath):
@@ -281,46 +358,3 @@ def load_all_trajectories():
             trajectories.append(Trajectory(obs=np.array(observations),acts=np.array(actions),terminal=terminal,infos=None))
 
     return trajectories
-
-
-# def load_all_trajectories():
-
-#     # This function will load all the trajectories in the dataset/trajectories folder:
-
-#     unique_timestamps = list_unique_timestamps()
-    
-#     trajectories = []
-
-#     for timestamp in unique_timestamps:
-#         observations = []
-#         actions = []
-#         infos = []
-#         for i in range(9):
-#             # Opening JSON file
-#             f = open('dataset/trajectories/{}_{}.json'.format(timestamp,i))
-#             data = json.load(f)
-
-#             obs = np.concatenate(( np.array(data['conditions']),
-#                                 np.array([data['volume']]),
-#                                 np.array([data['n_steps_left']]),
-#                                 np.array(data['design_variables']).squeeze(),
-#             ))
-                                
-
-#             acts = np.array(data['action'])
-            
-#             observations.append(obs)
-#             infos.append({})
-            
-#             if acts != []:
-#                 actions.append(acts.squeeze())
-
-#             terminal = True
-
-#         trajectories.append(Trajectory(obs=np.array(observations),acts=np.array(actions),terminal=terminal,infos=None))
-
-#     return trajectories
-
-
-
-

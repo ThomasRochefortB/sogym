@@ -1,30 +1,42 @@
 # A 200 LINE TOPOLOGY OPTIMIZATION CODE BY NIELS AAGE AND VILLADS EGEDE JOHANSEN, JANUARY 2013
 # Updated by Niels Aage February 2016
+import os
+# Disable multithreading for various libraries
+os.environ['OPENBLAS_NUM_THREADS'] = '1'  # For OpenBLAS
+
 import numpy as np
 from scipy.sparse import coo_matrix
-from scipy.sparse.linalg import spsolve
 from matplotlib import colors
 import matplotlib.pyplot as plt
 import cvxopt 
 import cvxopt.cholmod
 
 
-def run_simp(nelx,nely,BC_dict,penal,rmin,ft):
+def run_simp(nelx,nely,BC_dict,penal,rmin,ft, cfg=None, verbose=1):
 	
+	if cfg is None:
+		cfg = {
+			'optimizer': 'OC',
+			'Emin': 1e-9,
+			'Emax': 1.0,
+			'maxiter': 1000,
+			'convergence_threshold': 1e-2
+		}
 
 	volfrac = BC_dict['volfrac']
 	loaddof_x = BC_dict['loaddof_x']
 	loaddof_y = BC_dict['loaddof_y']
 	magnitude_x = BC_dict['magnitude_x']
 	magnitude_y = BC_dict['magnitude_y']
-	print("Minimum compliance problem with OC")
-	print("ndes: " + str(nelx) + " x " + str(nely))
-	print("volfrac: " + str(volfrac) + ", rmin: " + str(rmin) + ", penal: " + str(penal))
-	print("Filter method: " + ["Sensitivity based","Density based"][ft])
+	if verbose==1:
+		print("Minimum compliance problem with OC")
+		print("ndes: " + str(nelx) + " x " + str(nely))
+		print("volfrac: " + str(volfrac) + ", rmin: " + str(rmin) + ", penal: " + str(penal))
+		print("Filter method: " + ["Sensitivity based","Density based"][ft])
 
 	# Max and min stiffness
-	Emin=1e-9
-	Emax=1.0
+	Emin=cfg['Emin']
+	Emax=cfg['Emax']
 
 	# dofs:
 	ndof = 2*(nelx+1)*(nely+1)
@@ -102,17 +114,18 @@ def run_simp(nelx,nely,BC_dict,penal,rmin,ft):
 	f = f_x + f_y
 	
 	#plt.ion() # Ensure that redrawing is possible
-	fig,ax = plt.subplots()
-	im = ax.imshow(-xPhys.reshape((nelx,nely)).T, cmap='gray',\
-	interpolation='none',norm=colors.Normalize(vmin=-1,vmax=0),origin='lower')
-	fig.show()
+	# fig,ax = plt.subplots()
+	# im = ax.imshow(-xPhys.reshape((nelx,nely)).T, cmap='gray',\
+	# interpolation='none',norm=colors.Normalize(vmin=-1,vmax=0),origin='lower')
     
+
+
 	loop=0
 	change=1
 	dv = np.ones(nely*nelx)
 	dc = np.ones(nely*nelx)
 	ce = np.ones(nely*nelx)
-	while change>0.01 and loop<1000:
+	while change>cfg['convergence_threshold'] and loop<cfg['maxiter']:
 		loop=loop+1
 		# Setup and solve FE problem
 		sK=((KE.flatten()[np.newaxis]).T*(Emin+(xPhys)**penal*(Emax-Emin))).flatten(order='F')
@@ -149,17 +162,14 @@ def run_simp(nelx,nely,BC_dict,penal,rmin,ft):
 		# Compute the change by the inf. norm
 		change=np.linalg.norm(x.reshape(nelx*nely,1)-xold.reshape(nelx*nely,1),np.inf)
 
-
-
-		# Plot to screen
-		im.set_array(-xPhys.reshape((nelx,nely)).T)
-		fig.canvas.draw()
 		# Write iteration history to screen (req. Python 2.6 or newer)
-		print("it.: {0} , obj.: {1:.3f} Vol.: {2:.3f}, ch.: {3:.3f}".format(\
-					loop,obj,(g+volfrac*nelx*nely)/(nelx*nely),change))
+		if verbose==1:
+			print("it.: {0} , obj.: {1:.3f} Vol.: {2:.3f}, ch.: {3:.3f}".format(\
+						loop,obj,(g+volfrac*nelx*nely)/(nelx*nely),change))
+
 
 	# Make sure the plot stays and that the shell remains	
-	plt.show()
+	return xPhys.reshape((nelx,nely)).T, obj, loop, cfg
     
 #element stiffness matrix
 def lk():

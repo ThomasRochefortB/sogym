@@ -14,6 +14,7 @@ def filter_load_orientations(support_orientation):
     exclude_range = [(support_orientation + angle) % 360 for angle in range(-45, 46)]
     exclude_range += [(support_orientation + 180 + angle) % 360 for angle in range(-45, 46)]
     return [o for o in valid_orientations if o not in exclude_range]
+
 def gen_randombc(seed,resolution=100):
     
     random.seed(seed)
@@ -78,7 +79,7 @@ def gen_randombc(seed,resolution=100):
 
 
     # Generate n_loads random position for each load and ensure they are different:
-    load_position = np.round(np.random.uniform(0, 0.0,size=n_loads),2)
+    load_position = np.round(np.random.uniform(0, 1.0,size=n_loads),2)
     if n_loads==1:
         while len(np.unique(load_position)) != n_loads:
             load_position = np.round(np.random.uniform(0, 0.99,size=n_loads),2)

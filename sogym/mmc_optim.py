@@ -56,18 +56,40 @@ def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilo
     return [allPhi,allPhidrv,xval,actComp,actDsvb]
 
 
-def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probably need to add xmin and xmax
-    xInt = 0.165*dx  #0.125 for 8 x 8, 0.165 for 3x3, 0.25 for 2x2
-    yInt = 0.165*dy
+def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0,cfg=None):   ## Probably need to add xmin and xmax
+    if cfg is None:
+        cfg = {
+            'optimizer':'hybrid', #optimiser choice
+            'xInt':0.165, #initial interval of components in x
+            'yInt':0.165, #initial interval of components in y
+            'E':1.0, #Young's modulus
+            'nu':0.3, #Poisson ratio
+            'h':1, #thickness
+            'dgt0':5, #significant digit of sens.
+            'scl':1, #scale factor for obj
+            'p':6,  #power of super ellipsoid
+            'lmd':100, #power of KS aggregation   
+            'maxiter':500, # maximum number of outer iterations
+            'alpha':1e-9, # This is the threshold level in the Heaviside function
+            'epsilon':0.2, #This is the regularization term in the Heaviside function
+            'maxinnerinit':1, # This is the maximum number of inner iterations for GCMMA
+            'switch':-0.000002, # This is the switch criteria for the hybrid optimizer
+            'convergence_threshold':2e-4, #This is the threshold for the relative change in the objective function
+            'xmin':(0.0, 0.0, 0.0, 0.00, 0.00, -np.pi),
+            'xmax':(dx, dy, 0.7*min(dx,dy), 0.05*min(dx,dy),0.05*min(dx,dy), np.pi)
+        }
+
+    xInt = cfg['xInt']*dx  #0.125 for 8 x 8, 0.165 for 3x3, 0.25 for 2x2
+    yInt = cfg['yInt']*dy
     vInt = [0.3*min(dx,dy), 0.03, 0.03, np.arcsin(0.7)]
-    E = 1.0 #Young's modulus
-    nu = 0.3 #Poisson ratio
-    h = 1 #thickness                              
-    dgt0 = 5 #significant digit of sens.
-    scl = 1 #scale factor for obj                                           
-    p = 6   #power of super ellipsoid
-    lmd = 100    #power of KS aggregation   (default 100)                                   
-    maxiter = 500 # maximum number of iterations                                       
+    E = cfg['E'] #Young's modulus
+    nu = cfg['nu'] #Poisson ratio
+    h = cfg['h'] #thickness                              
+    dgt0 = cfg['dgt0'] #significant digit of sens.
+    scl = cfg['scl'] #scale factor for obj                                           
+    p = cfg['p']   #power of super ellipsoid
+    lmd = cfg['lmd']    #power of KS aggregation   (default 100)                                   
+    maxiter = cfg['maxiter'] # maximum number of iterations                                       
     objVr5 = 1.0  # initial relative variat. of obj. last 5 iterations
 
     ## Setting of FE discretization
@@ -77,8 +99,8 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     EL = dx/nelx                  # length of finite elements
     EW = dy/nely                  # width of finite elements
     minSz = min([EL,EW])*3          # minimum size of finite elements
-    alpha = 1e-9                  # void density
-    epsilon = 0.2            # regularization term in Heaviside (default 0.2)
+    alpha = cfg['alpha']                  # void density
+    epsilon = cfg['epsilon']          # regularization term in Heaviside (default 0.2)
     Ke = Ke_tril(E,nu,EL,EW,h)  # non-zero upper triangular of ele. stiffness 
     KE=np.tril(np.ones(8)).flatten(order='F')
     KE[KE==1] = Ke.T
@@ -145,8 +167,8 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     xval = xval.reshape((xval.shape[0],1))
     xold1 = xval.copy()
     xold2 = xval.copy()
-    xmin=np.vstack((0.0, 0.0, 0.0, 0.00, 0.00, -np.pi))
-    xmax=np.vstack((dx, dy, 0.7*min(dx,dy), 0.05*min(dx,dy),0.05*min(dx,dy), np.pi))
+    xmin=np.vstack(cfg['xmin'])
+    xmax=np.vstack(cfg['xmax'])
     xmin=np.matlib.repmat(xmin,N,1)
     xmax=np.matlib.repmat(xmax,N,1)
     low = xmin
@@ -238,7 +260,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     # SEC 6): OPTIMIZATION LOOP
     loop=1
     totalinner_it=0
-    maxinnerinit=1
+    maxinnerinit=cfg['maxinnerinit']
     OBJ=[]
     CONS=[]
     outeriter=0
@@ -250,17 +272,18 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
     epsimin = 1e-09
     denSld=[0]
     change=1000
-
+    switch = cfg['switch']
     f0val,df0dx,fval,dfdx,U,H,Phimax,allPhi,actComp,actDsvb,allPhiDrv,denSld, den = comp_deriv(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
     f0val_1=f0val.copy()
     f0val_2=f0val.copy()
     criteria=((f0val_2-f0val_1)/((abs(f0val_2)+abs(f0val_1))/2))*((f0val_1-f0val)/(abs(f0val_1)+abs(f0val))/2)
     optimizer='MMA'
+    stop_threshold = cfg['convergence_threshold']
 
-    while objVr5>1e-4 and loop<=maxiter:
+    while objVr5>stop_threshold and loop<=maxiter:
         outeriter += 1
         criteria=((f0val_2-f0val_1)/((abs(f0val_2)+abs(f0val_1))/2))*((f0val_1-f0val)/(abs(f0val_1)+abs(f0val))/2)
-        if criteria>-0.000002 and criteria<0:
+        if criteria>switch and criteria<0:
             optimizer='GCMMA'  
 
         if optimizer=='MMA':
@@ -276,7 +299,6 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
             f0valnew,fvalnew,U,H,Phimax,allPhi, actComp, actDsvb ,allPhiDrv, denSld, den = comp(nNod,nDsvb,actComp,allPhi,LSgrid,p,nEhcp,epsilon,actDsvb,minSz,lmd,alpha,eleNodesID,nNd,xval,denSld)
 
             # It is checked if the approximations are conservative:
-            print()
             conserv = concheck(m,epsimin,f0app,f0valnew,fapp,fvalnew)
             # While the approximations are non-conservative (conserv=0), repeated inner iterations are made:
             innerit = 0
@@ -412,5 +434,5 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0):   ## Probab
             print(fval/volfrac)
             print("Volume fraction: ",fval," Desired: ",volfrac)
         loop+=1
-    return xval.squeeze(), f0val.squeeze(),loop+totalinner_it, H, Phimax, allPhi, den, N
+    return xval.squeeze(), f0val.squeeze(),loop+totalinner_it, H, Phimax, allPhi, den, N, cfg
 
