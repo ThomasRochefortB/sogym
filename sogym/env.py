@@ -108,6 +108,7 @@ class sogym(gym.Env):
             self.conditions['selected_boundary'],
             self.conditions['support_type'],
             self.conditions['boundary_length'],
+
             self.conditions['boundary_position']
         ])
         for i in range(self.conditions['n_loads']):
@@ -167,7 +168,7 @@ class sogym(gym.Env):
         return self.observation 
         
         
-    def step(self, action):
+    def step(self, action,evaluate=True):
         self.action_count+=1   # One action is taken
        
         self.new_variables=(self.xmax.squeeze()-self.xmin.squeeze())/(2)*(action-1)+self.xmax.squeeze()  # We convert from  [-1,1] to [xmin,xmax]
@@ -198,29 +199,27 @@ class sogym(gym.Env):
         self.volume=sum(self.den)*self.EW*self.EH/(self.dx*self.dy)
         
 
-        # The reward function is the sparse reward given only at the end of the episode if the desired volume fraction is respected.
-        if self.action_count<self.N_components: # We are not at the end of the episode
-            reward=0.0
-            done=False
+        done = self.action_count >= self.N_components
+        reward = 0.0
 
-        else: # We are at the end of the episode
-            done=True
+        if done:
             self.last_Phi = self.Phi
-            self.last_conditions,self.last_nelx, self.last_nely ,self.last_x, self.last_y ,self.last_dx, self.last_dy = self.conditions, self.nelx, self.nely, self.x, self.y, self.dx, self.dy
-            self.compliance,self.volume, self.U, self.F=calculate_compliance(self.H,self.conditions,self.dx,self.dy,self.nelx,self.nely) # We calculate the compliance, volume and von Mises stress of the structure
+            self.last_conditions, self.last_nelx, self.last_nely, self.last_x, self.last_y, self.last_dx, self.last_dy = \
+                self.conditions, self.nelx, self.nely, self.x, self.y, self.dx, self.dy
 
-            if self.vol_constraint_type=='hard':  
-                if self.volume<= self.conditions['volfrac'] and self.check_connec(): # The desired volume fraction is respected
-                    reward=(1/((self.compliance/len(self.conditions['loaddof_x']))+1e-8)) # The reward is the inverse of the compliance (AKA the stiffness of the structure)
-                else:
-                    reward=0.0
+            if evaluate:
+                self.compliance, self.volume, self.U, self.F = calculate_compliance(self.H, self.conditions, self.dx, self.dy, self.nelx, self.nely)
+                
+                if self.vol_constraint_type == 'hard' and self.volume <= self.conditions['volfrac'] and self.check_connec():
+                    reward = 1 / (self.compliance / len(self.conditions['loaddof_x']) + 1e-8)
+                elif self.vol_constraint_type != 'hard' and self.check_connec():
+                    reward = (1 / (self.compliance / len(self.conditions['loaddof_x']) + 1e-8)) * (1 - abs(self.volume - self.conditions['volfrac']))**6
             else:
-                if self.check_connec():
-                    reward=(1/((self.compliance/len(self.conditions['loaddof_x']))+1e-8)) * (1-abs(self.volume-self.conditions['volfrac']))**6 # The reward is the inverse of the compliance (AKA the stiffness of the structure) times a penalty term for the volume fraction
-                else:
-                    reward=0.0
-            if math.isnan(reward): #Sometimes I get some nan rewards which screws training... need to investigate later but for now we will catch it like this.
+                self.compliance, self.volume, self.U, self.F = 0.0, 0.0, 0.0, 0.0
+
+            if math.isnan(reward):   #Sometimes my reward is Nan ... Need to investigate later
                 reward = 0.0
+
         info={}
         if self.observation_type=='dense':
             self.observation = {"beta":np.float32(self.beta),
@@ -427,18 +426,21 @@ class sogym(gym.Env):
             for i in range(self.conditions['n_loads']):
             #labels of load:
                 labels_load .append(labels[int(self.conditions['load_position'][i]*self.nely),-1])
+        
         elif self.conditions['selected_boundary']==0.25: # Right boundary
             label_support = labels[int(self.conditions['boundary_position']*self.nely):int(self.conditions['boundary_position']*self.nely)+int(self.conditions['boundary_length']*self.nely),-1]
             labels_load=[]
             for i in range(self.conditions['n_loads']):
             #labels of load:
                 labels_load .append(labels[int(self.conditions['load_position'][i]*self.nely),0])
+        
         elif self.conditions['selected_boundary']==0.5: # Bottom boundary
             label_support = labels[-1,int(self.conditions['boundary_position']*self.nelx):int(self.conditions['boundary_position']*self.nelx)+int(self.conditions['boundary_length']*self.nelx)]
             labels_load=[]
             for i in range(self.conditions['n_loads']):
             #labels of load:
                 labels_load .append(labels[0,int(self.conditions['load_position'][i]*self.nelx)])
+        
         elif self.conditions['selected_boundary']==0.75: # Top boundary
             label_support = labels[0,int(self.conditions['boundary_position']*self.nelx):int(self.conditions['boundary_position']*self.nelx)+int(self.conditions['boundary_length']*self.nelx)]
             labels_load=[]

@@ -38,8 +38,8 @@ def calc_Phi(variable, LSgrid, p):
 
     x1 = ct*(LSgrid[0][:,None]-x0) + st*(LSgrid[1][:,None]-y0) + np.spacing(1)
     y1 = -st*(LSgrid[0][:,None]-x0) + ct*(LSgrid[1][:,None]-y0) + np.spacing(1)
-    l = (t1+t2)/2 + (t2-t1)/2/L*x1 + np.spacing(1)
-    temp = ((x1)**p)/((L**p)+1e-08) + ((y1)**p)/((l**p)+1e-08)
+    l = (t1+t2)/2 + (t2-t1)/2/L*x1 #+ np.spacing(1)
+    temp = ((x1)**p)/((L**p)) + ((y1)**p)/((l**p))
     allPhi = 1 - temp**(1/p)
     
     return allPhi

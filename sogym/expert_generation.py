@@ -20,13 +20,36 @@ import json
 
 import matplotlib.pyplot as plt
 import random
+def plot_random_mmc(folder_path, num_files=10):
+    files = os.listdir(folder_path)
+    random_files = random.sample(files, min(num_files, len(files)))
 
-def plot_10_random_simp():
+    fig, axes = plt.subplots(2, 5, figsize=(15, 6)) # Adjust the subplot layout as needed
+    colors = ['yellow', 'g', 'r', 'c', 'm', 'y', 'black', 'orange', 'pink', 'cyan', 'slategrey', 'wheat', 'purple', 'mediumturquoise', 'darkviolet', 'orangered'] * 10
+
+    for i, file in enumerate(random_files):
+        with open(os.path.join(folder_path, file)) as f:
+            data = json.load(f)
+
+        phi = np.array(data['phi'])
+        nelx = np.array(data['nelx'])
+        nely = np.array(data['nely'])
+
+        ax = axes[i // 5, i % 5] # Adjust for your subplot layout
+        for j, color in zip(range(0, phi.shape[-1]), colors):
+            ax.contourf(phi[:, j].reshape((nely + 1, nelx + 1), order='F'), [0, 1], colors=color)
+
+        ax.set_title(os.path.basename(file))
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+def plot_10_random_simp(folder_path):
     # I want to plot 10 plots by reading 10 random jsons in .dataset/topologies/simp
     # Then, the key 'design_variables'  and plt.imshow:
 
     # Let's get the list of available files in the simp folder:
-    simp_folder = './dataset/topologies/simp/'
+    simp_folder = folder_path
     available_files = os.listdir(simp_folder)
 
     # Let's plot 10 random topologies from the simp folder:
