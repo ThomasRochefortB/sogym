@@ -93,7 +93,7 @@ class sogym(gym.Env):
             self.model_output =  self.model(self.tokenizer(prompt, return_tensors="pt",padding = 'max_length').input_ids.to(self.device)).last_hidden_state.detach().cpu().numpy().flatten()
         self.EW=self.dx / self.nelx # length of element
         self.EH=self.dy/ self.nely # width of element     
-        self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.001, 0.001))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
+        self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.01, 0.01))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
         self.xmax=np.vstack((self.dx, self.dy, self.dx, self.dy, 0.05*min(self.dx,self.dy),0.05*min(self.dx,self.dy))) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
         self.x,self.y=np.meshgrid(np.linspace(0, self.dx,self.nelx+1),np.linspace(0,self.dy,self.nely+1))                # coordinates of nodal points
         self.variables_plot=[]
@@ -423,17 +423,20 @@ class sogym(gym.Env):
                         (0, slice(int(self.conditions['boundary_position'] * self.nelx),
                                     int((self.conditions['boundary_position'] + self.conditions['boundary_length']) * self.nelx)))]
 
+        # Define slices for load based on the opposite boundary and load_position
         load_slices = []
         for i in range(self.conditions['n_loads']):
-            if opposite_boundary_key == 0:  # Left
-                load_slices.append((int(self.conditions['load_position'][i] * self.nely), 0))
-            elif opposite_boundary_key == 1:  # Right
-                load_slices.append((int(self.conditions['load_position'][i] * self.nely), -1))
-            elif opposite_boundary_key == 2:  # Bottom
-                load_slices.append((-1, int(self.conditions['load_position'][i] * self.nelx)))
-            elif opposite_boundary_key == 3:  # Top
-                load_slices.append((0, int(self.conditions['load_position'][i] * self.nelx)))
+            load_pos_y = min(int(self.conditions['load_position'][i] * self.nely), self.nely - 1)
+            load_pos_x = min(int(self.conditions['load_position'][i] * self.nelx), self.nelx - 1)
 
+            if opposite_boundary_key == 0:  # Left
+                load_slices.append((load_pos_y, 0))
+            elif opposite_boundary_key == 1:  # Right
+                load_slices.append((load_pos_y, self.nelx - 1))
+            elif opposite_boundary_key == 2:  # Bottom
+                load_slices.append((self.nely - 1, load_pos_x))
+            elif opposite_boundary_key == 3:  # Top
+                load_slices.append((0, load_pos_x))
         # Get labels for support and loads
         labels_support = labels[boundary_slices[boundary_key]]
         for idx in load_slices:
