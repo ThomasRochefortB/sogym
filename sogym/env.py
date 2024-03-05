@@ -1,4 +1,5 @@
-import gym
+import gymnasium as gym
+from gymnasium import spaces
 from sogym.struct import build_design, calculate_compliance
 from sogym.rand_bc import generate_prompt
 import numpy as np
@@ -11,48 +12,47 @@ import math
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,resolution = 100, observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard',seed=None,model=None,tokenizer=None):
+    def __init__(self,N_components=8,resolution = 100, observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard',model=None,tokenizer=None):
      
         self.N_components = N_components
         self.mode = mode
         self.observation_type = observation_type
         self.img_format = img_format
         self.vol_constraint_type = vol_constraint_type
-        self.seed = seed
         self.N_actions = 6 
         self.counter=0  
         self.resolution = resolution
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
 
-        self.action_space = gym.spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
         if self.img_format == 'CHW':
             img_shape = (3,128,128)
         elif self.img_format == 'HWC':
             img_shape = (128,128,3)
 
         if self.observation_type =='dense':
-            self.observation_space = gym.spaces.Dict(
-                                        spaces={
-                                            "beta": gym.spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
-                                            "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
-                                            "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
+            self.observation_space = spaces.Dict(
+                                        {
+                                            "beta": spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
+                                            "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )
         
         elif self.observation_type =='box_dense':
-            self.observation_space = gym.spaces.Box(low=-np.pi, high=np.pi, shape=(27+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
+            self.observation_space = spaces.Box(low=-np.pi, high=np.pi, shape=(27+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
 
 
         elif self.observation_type =='image':
-            self.observation_space = gym.spaces.Dict(
-                                        spaces={
-                                            "image": gym.spaces.Box(0, 255, img_shape,dtype=np.uint8), # Image of the current design
-                                            "beta": gym.spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
-                                            "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
-                                            "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
+            self.observation_space = spaces.Dict(
+                                        {
+                                            "image": spaces.Box(0, 255, img_shape,dtype=np.uint8), # Image of the current design
+                                            "beta": spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
+                                            "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )   
         elif self.observation_type =='text_dict':
@@ -60,25 +60,25 @@ class sogym(gym.Env):
             self.model = model
             #device agnostic code:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            self.observation_space = gym.spaces.Dict(
+            self.observation_space = spaces.Dict(
                                         spaces={
                                             # Prompt will have no max min (-inf,inf)
-                                            "prompt": gym.spaces.Box(-np.inf,np.inf, (768*512,),dtype=np.float32), # Description vector \beta containing (TO DO)
-                                            "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
-                                            "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
+                                            "prompt": spaces.Box(-np.inf,np.inf, (768*512,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
+                                            "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )
         else:
             raise ValueError('Invalid observation space type. Only "dense", "box_dense" , "text_dict"(experimental) and "image" are supported.')
 
-    def reset(self,start_dict=None):
+    def reset(self,seed=None,start_dict=None):
         
         if self.mode == 'test':
             self.counter+=1
             self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.counter, resolution=self.resolution)
         else:
-            self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.seed, resolution=self.resolution)
+            self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=seed, resolution=self.resolution)
             
         if start_dict is not None:
             self.dx = start_dict['dx']
@@ -164,8 +164,8 @@ class sogym(gym.Env):
         else:
 
             raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
-
-        return self.observation 
+        info ={}
+        return (self.observation,info )
         
         
     def step(self, action,evaluate=True):
@@ -198,11 +198,11 @@ class sogym(gym.Env):
         self.den=np.sum(self.H[eleNodesID.astype('int')],1)/4 
         self.volume=sum(self.den)*self.EW*self.EH/(self.dx*self.dy)
         
-
-        done = self.action_count >= self.N_components
+        truncated = False
+        terminated = self.action_count >= self.N_components
         reward = 0.0
 
-        if done:
+        if terminated:
             self.last_Phi = self.Phi
             self.last_conditions, self.last_nelx, self.last_nely, self.last_x, self.last_y, self.last_dx, self.last_dy = \
                 self.conditions, self.nelx, self.nely, self.x, self.y, self.dx, self.dy
@@ -253,7 +253,7 @@ class sogym(gym.Env):
             raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
         self.saved_volume.append(self.volume)
 
-        return self.observation, reward, done, info
+        return self.observation, reward, terminated, truncated, info
     
 
     def plot(self, mode='human',test=None, train_viz=True):
@@ -391,68 +391,59 @@ class sogym(gym.Env):
         return res
 
     def check_connec(self):
-        connec=[]
-        # Load grayscale image
-        img = (self.den.reshape((self.nely,self.nelx),order='F'))
-        # Threshold the image to create a binary image with dark pixels as 1s and light pixels as 0s
-        thresh = cv2.threshold(img,0.1, 255, cv2.THRESH_BINARY)[1]
-        thresh = np.array(thresh,dtype=np.uint8)
+        # Load grayscale image and threshold to create a binary image
+        img = self.den.reshape((self.nely, self.nelx), order='F')
+        thresh = cv2.threshold(img, 0.1, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)
 
-        # Apply a connected component analysis to find the connected components in the image
-        output = cv2.connectedComponentsWithStats(thresh, connectivity=8)
-        # The first cell is the number of labels
-        num_labels = output[0]
-        # The second cell is the label matrix
-        labels = output[1]
-        # The third cell is the stat matrix
-        stats = output[2]
-        # The fourth cell is the centroid matrix
-        centroids = output[3]
+        # Apply connected components analysis
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, connectivity=8)
 
-        # Let's say we want to know if the load and the support boundaries are connected:
-        #Relative y position of load
-        #Relative x position of load
-        #Relative y position of support_1
-        #Relative x position of support_1
-        #Relative y position of support_2
-        #Relative x position of support_2
-        #Volume fraction (between 0 and 1)
-        #magnitude of load in x 
-        #magnitude of load in y 
+        # Initialize variables
+        labels_load = []
+        boundary_key = int(self.conditions['selected_boundary'] / 0.25)
 
-        if self.conditions['selected_boundary']==0.0:  # Left boundary
-            label_support = labels[int(self.conditions['boundary_position']*self.nely):int(self.conditions['boundary_position']*self.nely)+int(self.conditions['boundary_length']*self.nely),0]
-            labels_load=[]
-            for i in range(self.conditions['n_loads']):
-            #labels of load:
-                labels_load .append(labels[int(self.conditions['load_position'][i]*self.nely),-1])
-        
-        elif self.conditions['selected_boundary']==0.25: # Right boundary
-            label_support = labels[int(self.conditions['boundary_position']*self.nely):int(self.conditions['boundary_position']*self.nely)+int(self.conditions['boundary_length']*self.nely),-1]
-            labels_load=[]
-            for i in range(self.conditions['n_loads']):
-            #labels of load:
-                labels_load .append(labels[int(self.conditions['load_position'][i]*self.nely),0])
-        
-        elif self.conditions['selected_boundary']==0.5: # Bottom boundary
-            label_support = labels[-1,int(self.conditions['boundary_position']*self.nelx):int(self.conditions['boundary_position']*self.nelx)+int(self.conditions['boundary_length']*self.nelx)]
-            labels_load=[]
-            for i in range(self.conditions['n_loads']):
-            #labels of load:
-                labels_load .append(labels[0,int(self.conditions['load_position'][i]*self.nelx)])
-        
-        elif self.conditions['selected_boundary']==0.75: # Top boundary
-            label_support = labels[0,int(self.conditions['boundary_position']*self.nelx):int(self.conditions['boundary_position']*self.nelx)+int(self.conditions['boundary_length']*self.nelx)]
-            labels_load=[]
-            for i in range(self.conditions['n_loads']):
-            #labels of load:
-                labels_load .append(labels[-1,int(self.conditions['load_position'][i]*self.nelx)])
+        # Define opposite boundaries for each boundary_key
+        opposite_boundaries = {
+            0: 1,  # Left to Right
+            1: 0,  # Right to Left
+            2: 3,  # Bottom to Top
+            3: 2   # Top to Bottom
+        }
+        opposite_boundary_key = opposite_boundaries[boundary_key]
 
-        for load in labels_load:
-            if load in label_support and load!=0:
-                connec.append(True)
-            else:
-                connec.append(False)
-        # return True if connec is not empty and if all its elements are True
+
+        boundary_slices = [(slice(int(self.conditions['boundary_position'] * self.nely),
+                                int((self.conditions['boundary_position'] + self.conditions['boundary_length']) * self.nely)),
+                            0),
+                        (slice(int(self.conditions['boundary_position'] * self.nely),
+                                int((self.conditions['boundary_position'] + self.conditions['boundary_length']) * self.nely)),
+                            -1),
+                        (-1, slice(int(self.conditions['boundary_position'] * self.nelx),
+                                    int((self.conditions['boundary_position'] + self.conditions['boundary_length']) * self.nelx))),
+                        (0, slice(int(self.conditions['boundary_position'] * self.nelx),
+                                    int((self.conditions['boundary_position'] + self.conditions['boundary_length']) * self.nelx)))]
+
+        load_slices = []
+        for i in range(self.conditions['n_loads']):
+            if opposite_boundary_key == 0:  # Left
+                load_slices.append((int(self.conditions['load_position'][i] * self.nely), 0))
+            elif opposite_boundary_key == 1:  # Right
+                load_slices.append((int(self.conditions['load_position'][i] * self.nely), -1))
+            elif opposite_boundary_key == 2:  # Bottom
+                load_slices.append((-1, int(self.conditions['load_position'][i] * self.nelx)))
+            elif opposite_boundary_key == 3:  # Top
+                load_slices.append((0, int(self.conditions['load_position'][i] * self.nelx)))
+
+        # Get labels for support and loads
+        labels_support = labels[boundary_slices[boundary_key]]
+        for idx in load_slices:
+            labels_load.append(labels[idx])
+
+        # Check connection between load labels and support label
+        connec = [load in labels_support and load != 0 for load in labels_load]
+
+
+        # Return True if all connections are True (and not empty)
         return bool(connec) and all(connec)
+
     

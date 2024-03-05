@@ -1,7 +1,7 @@
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import Figure
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-import gym
+import gymnasium as gym
 import torch as th
 from torch import nn
 import matplotlib.pyplot as plt
