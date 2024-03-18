@@ -1,4 +1,5 @@
-import gym
+import gymnasium as gym
+from gymnasium import spaces
 from sogym.struct import build_design, calculate_compliance
 from sogym.rand_bc import generate_prompt
 import numpy as np
@@ -11,50 +12,48 @@ import math
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,resolution = 100,observation_type = 'dense',mode = 'train',img_format='CHW',vol_constraint_type='hard',check_connectivity = False,seed=None,model=None,tokenizer=None):
+    def __init__(self,N_components=8,resolution = 100, observation_type = 'dense',mode = 'train',img_format='CHW',seed=None,vol_constraint_type='hard',model=None,tokenizer=None):
      
         self.N_components = N_components
         self.mode = mode
         self.observation_type = observation_type
         self.img_format = img_format
         self.vol_constraint_type = vol_constraint_type
-        self.check_connectivity = check_connectivity
         self.seed = seed
         self.N_actions = 6 
         self.counter=0  
         self.resolution = resolution
-
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
 
-        self.action_space = gym.spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
         if self.img_format == 'CHW':
             img_shape = (3,128,128)
         elif self.img_format == 'HWC':
             img_shape = (128,128,3)
 
         if self.observation_type =='dense':
-            self.observation_space = gym.spaces.Dict(
-                                        spaces={
-                                            "beta": gym.spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
-                                            "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
-                                            "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
+            self.observation_space = spaces.Dict(
+                                        {
+                                            "beta": spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
+                                            "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )
         
         elif self.observation_type =='box_dense':
-            self.observation_space = gym.spaces.Box(low=-np.pi, high=np.pi, shape=(27+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
+            self.observation_space = spaces.Box(low=-np.pi, high=np.pi, shape=(27+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
 
 
         elif self.observation_type =='image':
-            self.observation_space = gym.spaces.Dict(
-                                        spaces={
-                                            "image": gym.spaces.Box(0, 255, img_shape,dtype=np.uint8), # Image of the current design
-                                            "beta": gym.spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
-                                            "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
-                                            "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
+            self.observation_space = spaces.Dict(
+                                        {
+                                            "image": spaces.Box(0, 255, img_shape,dtype=np.uint8), # Image of the current design
+                                            "beta": spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
+                                            "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )   
         elif self.observation_type =='text_dict':
@@ -62,25 +61,25 @@ class sogym(gym.Env):
             self.model = model
             #device agnostic code:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            self.observation_space = gym.spaces.Dict(
+            self.observation_space = spaces.Dict(
                                         spaces={
                                             # Prompt will have no max min (-inf,inf)
-                                            "prompt": gym.spaces.Box(-np.inf,np.inf, (768*512,),dtype=np.float32), # Description vector \beta containing (TO DO)
-                                            "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
-                                            "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
+                                            "prompt": spaces.Box(-np.inf,np.inf, (768*512,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
+                                            "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )
         else:
             raise ValueError('Invalid observation space type. Only "dense", "box_dense" , "text_dict"(experimental) and "image" are supported.')
 
-    def reset(self,start_dict=None):
-        
+    def reset(self,seed=None,start_dict=None):
+        seed = self.seed
         if self.mode == 'test':
             self.counter+=1
-            self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.counter,resolution=self.resolution)
+            self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.counter, resolution=self.resolution)
         else:
-            self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.seed,resolution=self.resolution)
+            self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=seed, resolution=self.resolution)
             
         if start_dict is not None:
             self.dx = start_dict['dx']
@@ -95,7 +94,7 @@ class sogym(gym.Env):
             self.model_output =  self.model(self.tokenizer(prompt, return_tensors="pt",padding = 'max_length').input_ids.to(self.device)).last_hidden_state.detach().cpu().numpy().flatten()
         self.EW=self.dx / self.nelx # length of element
         self.EH=self.dy/ self.nely # width of element     
-        self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.0, 0.0))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
+        self.xmin=np.vstack((0, 0, 0.0, 0.0, 0.01, 0.01))  # (xa_min,ya_min, xb_min, yb_min, t1_min, t2_min)
         self.xmax=np.vstack((self.dx, self.dy, self.dx, self.dy, 0.05*min(self.dx,self.dy),0.05*min(self.dx,self.dy))) # (xa_max,ya_max, xb_max, yb_max, t1_max, t2_max)
         self.x,self.y=np.meshgrid(np.linspace(0, self.dx,self.nelx+1),np.linspace(0,self.dy,self.nely+1))                # coordinates of nodal points
         self.variables_plot=[]
@@ -110,6 +109,7 @@ class sogym(gym.Env):
             self.conditions['selected_boundary'],
             self.conditions['support_type'],
             self.conditions['boundary_length'],
+
             self.conditions['boundary_position']
         ])
         for i in range(self.conditions['n_loads']):
@@ -165,11 +165,11 @@ class sogym(gym.Env):
         else:
 
             raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
-
-        return self.observation 
+        info ={}
+        return (self.observation,info )
         
         
-    def step(self, action):
+    def step(self, action,evaluate=True):
         self.action_count+=1   # One action is taken
        
         self.new_variables=(self.xmax.squeeze()-self.xmin.squeeze())/(2)*(action-1)+self.xmax.squeeze()  # We convert from  [-1,1] to [xmin,xmax]
@@ -199,43 +199,26 @@ class sogym(gym.Env):
         self.den=np.sum(self.H[eleNodesID.astype('int')],1)/4 
         self.volume=sum(self.den)*self.EW*self.EH/(self.dx*self.dy)
         
+        truncated = False
+        terminated = self.action_count >= self.N_components
+        reward = 0.0
 
-        # The reward function is the sparse reward given only at the end of the episode if the desired volume fraction is respected.
-        if self.action_count<self.N_components: # We are not at the end of the episode
-            reward=0.0
-            done=False
-
-        else:  # We are at the end of the episode
-            done = True
+        if terminated:
             self.last_Phi = self.Phi
             self.last_conditions, self.last_nelx, self.last_nely, self.last_x, self.last_y, self.last_dx, self.last_dy = \
                 self.conditions, self.nelx, self.nely, self.x, self.y, self.dx, self.dy
-            self.compliance, self.volume, self.U, self.F = calculate_compliance(
-                self.H, self.conditions, self.dx, self.dy, self.nelx, self.nely)  # Calculate compliance, volume, and stress
 
-            # Check if connectivity check is required
-            if self.check_connectivity:
-                is_connected = self.check_connec()
+            if evaluate:
+                self.compliance, self.volume, self.U, self.F = calculate_compliance(self.H, self.conditions, self.dx, self.dy, self.nelx, self.nely)
+                
+                if self.vol_constraint_type == 'hard' and self.volume <= self.conditions['volfrac'] and self.check_connec():
+                    reward = 1 / (self.compliance / len(self.conditions['loaddof_x']) + 1e-8)
+                elif self.vol_constraint_type != 'hard' and self.check_connec():
+                    reward = (1 / (self.compliance / len(self.conditions['loaddof_x']) + 1e-8)) * (1 - abs(self.volume - self.conditions['volfrac']))**6
             else:
-                is_connected = True  # Assume connectivity check is not required or passed
+                self.compliance, self.volume, self.U, self.F = 0.0, 0.0, 0.0, 0.0
 
-            if self.vol_constraint_type == 'hard':
-                if self.volume <= self.conditions['volfrac'] and is_connected:
-                    denominator = ((self.compliance / len(self.conditions['loaddof_x'])))
-                    denominator = np.log(denominator)
-                    reward = (1 / denominator)
-                else:
-                    reward = 0.0
-            else:
-                if is_connected:
-                    denominator = ((self.compliance / len(self.conditions['loaddof_x'])))
-                    denominator = np.log(denominator)
-                    reward = (1 / denominator ) * \
-                            (1 - abs(self.volume - self.conditions['volfrac']))**6
-                else:
-                    reward = 0.0
-
-            if math.isnan(reward):  # Catch potential NaN rewards
+            if math.isnan(reward):   #Sometimes my reward is Nan ... Need to investigate later
                 reward = 0.0
 
         info={}
@@ -270,7 +253,8 @@ class sogym(gym.Env):
         else:
             raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
         self.saved_volume.append(self.volume)
-        return self.observation, reward, done, info
+
+        return self.observation, reward, terminated, truncated, info
     
 
     def plot(self, mode='human',test=None, train_viz=True):
@@ -297,23 +281,22 @@ class sogym(gym.Env):
         ax = plt.subplot(111)
         if train_viz:
             for i, color in zip(range(0,self.last_Phi.shape[1]), self.render_colors):
-                ax.contourf(x,y,np.flipud(self.last_Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
+                ax.contourf(x,y,self.last_Phi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors=color)
         else:
             if self.variables_plot==[]:
                  for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
-                    ax.contourf(x,y,np.flipud(self.Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors='white')
+                    ax.contourf(x,y,self.Phi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors='white')
             else:
                 for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
-                    ax.contourf(x,y,np.flipud(self.Phi[:,i].reshape((nely+1,nelx+1),order='F')),[0,1],colors=color)
+                    ax.contourf(x,y,self.Phi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors=color)
                     
             
-                    # Add a rectangle to show the domain boundary:
-        ax.add_patch(plt.Rectangle((0,0),dx, dy,
-                                    clip_on=False,linewidth = 10,fill=False))
+        # Add a rectangle to show the domain boundary:
+        ax.add_patch(plt.Rectangle((0,0),dx, dy,clip_on=False,linewidth = 1,fill=False))
         
         if condition_dict['selected_boundary']==0.0:  # Left boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (0.0,dy*(1.0-condition_dict['boundary_position']-condition_dict['boundary_length'])),
+            ax.add_patch(plt.Rectangle(xy = (0.0,dy*(condition_dict['boundary_position'])),
                                     width = condition_dict['boundary_length']*dy, 
                                     height = 0.1,
                                     angle = 90,
@@ -322,7 +305,7 @@ class sogym(gym.Env):
                                         linewidth = 0))
 
             for i in range(condition_dict['n_loads']):
-                ax.arrow(dx-(condition_dict['magnitude_x'][i]*0.2),dy*(1-condition_dict['load_position'][i]),
+                ax.arrow(dx-(condition_dict['magnitude_x'][i]*0.2),dy*(condition_dict['load_position'][i])-condition_dict['magnitude_y'][i]*0.2,
                             dx= condition_dict['magnitude_x'][i]*0.2,
                             dy = condition_dict['magnitude_y'][i]*0.2,
                             width=0.2/8,
@@ -331,7 +314,7 @@ class sogym(gym.Env):
                 
         elif condition_dict['selected_boundary']==0.25: # Right boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (dx+0.1,dy*(1.0-condition_dict['boundary_position']-condition_dict['boundary_length'])),
+            ax.add_patch(plt.Rectangle(xy = (dx+0.1,dy*(condition_dict['boundary_position'])),
                                     width = condition_dict['boundary_length']*dy, 
                                     height = 0.1,
                                     angle = 90,
@@ -340,7 +323,7 @@ class sogym(gym.Env):
                                         linewidth = 0))
 
             for i in range(condition_dict['n_loads']):
-                ax.arrow(0.0-(condition_dict['magnitude_x'][i]*0.2),dy*(1-condition_dict['load_position'][i])-condition_dict['magnitude_y'][i]*0.2,
+                ax.arrow(0.0-(condition_dict['magnitude_x'][i]*0.2),dy*(condition_dict['load_position'][i])-condition_dict['magnitude_y'][i]*0.2,
                             dx= condition_dict['magnitude_x'][i]*0.2,
                             dy = condition_dict['magnitude_y'][i]*0.2,
                             width=0.2/8,
@@ -348,8 +331,26 @@ class sogym(gym.Env):
                             head_starts_at_zero=False)
         elif condition_dict['selected_boundary']==0.5: # Bottom boundary
             # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (dx*self.conditions['boundary_position'],-0.1),
+            ax.add_patch(plt.Rectangle(xy = (dx*self.conditions['boundary_position'],dy),
                                     width = self.conditions['boundary_length']*self.dx, 
+                                    height = 0.1,
+                                    angle = 0.0,
+                                    hatch='/',
+                                        clip_on=False,
+                                        linewidth = 0))
+
+            for i in range(condition_dict['n_loads']):
+                ax.arrow(dx*(condition_dict['load_position'][i])-condition_dict['magnitude_x'][i]*0.2,-(condition_dict['magnitude_y'][i]*0.2),
+                            dx= condition_dict['magnitude_x'][i]*0.2,
+                            dy = condition_dict['magnitude_y'][i]*0.2,
+                            width=0.2/8,
+                            length_includes_head=True,
+                            head_starts_at_zero=False)
+                
+        elif condition_dict['selected_boundary']==0.75: # Top boundary
+            # Add a blue rectangle to show the support 
+            ax.add_patch(plt.Rectangle(xy = (dx*condition_dict['boundary_position'],-0.1),
+                                    width = condition_dict['boundary_length']*dx, 
                                     height = 0.1,
                                     angle = 0.0,
                                     hatch='/',
@@ -363,27 +364,8 @@ class sogym(gym.Env):
                             width=0.2/8,
                             length_includes_head=True,
                             head_starts_at_zero=False)
-                
-        elif condition_dict['selected_boundary']==0.75: # Top boundary
-            # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (dx*condition_dict['boundary_position'],dy),
-                                    width = condition_dict['boundary_length']*dx, 
-                                    height = 0.1,
-                                    angle = 0.0,
-                                    hatch='/',
-                                        clip_on=False,
-                                        linewidth = 0))
 
-            for i in range(condition_dict['n_loads']):
-                ax.arrow(dx*(condition_dict['load_position'][i])-condition_dict['magnitude_x'][i]*0.2,0.0-(condition_dict['magnitude_y'][i]*0.2),
-                            dx= condition_dict['magnitude_x'][i]*0.2,
-                            dy = condition_dict['magnitude_y'][i]*0.2,
-                            width=0.2/8,
-                            length_includes_head=True,
-                            head_starts_at_zero=False)
-
-        #ax.set_axis_off()
-
+        ax.set_axis_off()
         plt.close()
         return fig    
 
@@ -467,4 +449,5 @@ class sogym(gym.Env):
 
         # Return True if all connections are True (and not empty)
         return bool(connec) and all(connec)
+
     
