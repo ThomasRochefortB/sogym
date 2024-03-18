@@ -146,3 +146,16 @@ def build_design(variable,DW=2.0,DH=1.0,nelx=100,nely=50):
     return H, Phimax,allPhi, den
 
 
+def calculate_strains(x_displacement, y_displacement):
+    # Calculate strain fields based on displacement gradients
+    strain_xx = np.gradient(x_displacement, axis=1)
+    strain_yy = np.gradient(y_displacement, axis=0)
+    strain_xy = 0.5 * (np.gradient(x_displacement, axis=0) + np.gradient(y_displacement, axis=1))
+    return strain_xx, strain_yy, strain_xy
+
+def calculate_stresses(strain_xx, strain_yy, strain_xy, E=1.0, nu=0.3):
+    # Calculate stress fields based on strains and material properties
+    stress_xx = E / (1 - nu**2) * (strain_xx + nu * strain_yy)
+    stress_yy = E / (1 - nu**2) * (strain_yy + nu * strain_xx)
+    stress_xy = E / (2 * (1 + nu)) * strain_xy
+    return stress_xx, stress_yy, stress_xy
