@@ -99,8 +99,6 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
     F_y=csc_matrix((magnitude_y, (loaddof_y, np.zeros_like(loaddof_y))), shape=(nDof, 1))
     F=F_x+F_y
     
-    
-   
     den = np.sum(H[eleNodesID.astype('int')],1)/4                                 # elemental density vector (for volume)
     U = np.zeros((nDof,1))
     
