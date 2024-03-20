@@ -159,11 +159,11 @@ class sogym(gym.Env):
 
         if self.observation_type == 'image':
             if self.img_format == 'CHW':
-                empty_von_mises_stress = np.zeros((3, 128, 128), dtype=np.uint8)
+                empty_von_mises_stress = np.zeros((3, self.image_resolution, self.image_resolution), dtype=np.uint8)
             elif self.img_format == 'HWC':
-                empty_von_mises_stress = np.zeros((128, 128, 3), dtype=np.uint8)
+                empty_von_mises_stress = np.zeros((self.image_resolution, self.image_resolution, 3), dtype=np.uint8)
 
-            self.observation = {"image": self.gen_image(resolution=(128, 128)),
+            self.observation = {"image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
                                 "beta": np.float32(self.beta),
                                 "design_variables": np.float32(self.variables.flatten()),
                                 "volume": np.array([0.0], dtype=np.float32),
@@ -328,7 +328,7 @@ class sogym(gym.Env):
             von_mises_stress_normalized = np.ma.filled(von_mises_stress_normalized, 255)
 
             # Resize the von Mises stress field to the desired resolution
-            von_mises_stress_resized = cv2.resize(von_mises_stress_normalized, dsize=(128, 128), interpolation=cv2.INTER_CUBIC)
+            von_mises_stress_resized = cv2.resize(von_mises_stress_normalized, dsize=(self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
 
             # Reshape the von Mises stress field to match the image format (e.g., CHW)
             if self.img_format == 'CHW':
@@ -338,7 +338,7 @@ class sogym(gym.Env):
                 von_mises_stress_image = np.expand_dims(von_mises_stress_resized, axis=-1)
                 von_mises_stress_image = np.repeat(von_mises_stress_image, 3, axis=-1)  # Repeat to create RGB channels
 
-            self.observation = {"image": self.gen_image(resolution=(128, 128)),
+            self.observation = {"image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
                                 "beta": np.float32(self.beta),
                                 "design_variables": np.float32(self.variables.flatten()) / np.pi,
                                 "volume": np.array([self.volume], dtype=np.float32),

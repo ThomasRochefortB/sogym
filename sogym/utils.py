@@ -143,3 +143,64 @@ class CustomBoxDense(BaseFeaturesExtractor):
 
     def forward(self, observations: th.Tensor) -> th.Tensor:
         return self.linear(observations)
+
+import cProfile
+import pstats
+import pandas as pd
+from sogym.env import sogym
+
+def run_episodes(num_episodes, env):
+    for episode in range(num_episodes):
+        obs = env.reset()
+        done = False
+        while not done:
+            action = env.action_space.sample()  # Replace with your agent's action selection logic
+            obs, reward, done, truncated, info = env.step(action)
+
+def profile_and_analyze(num_episodes, env):
+    # Create a cProfile profiler
+    profiler = cProfile.Profile()
+
+    # Start profiling
+    profiler.enable()
+
+    # Run the episodes
+    run_episodes(num_episodes, env)
+
+    # Stop profiling
+    profiler.disable()
+
+    # Print the profiling statistics
+    stats = pstats.Stats(profiler)
+
+    # Extract profiling data
+    data = []
+    for func, (cc, nc, tt, ct, callers) in stats.stats.items():
+        filename, lineno, func_name = func
+        # Concatenate filename, line number, and function name to form the full path
+        full_func_path = f"{filename}:{lineno}({func_name})"
+        data.append([full_func_path, nc, tt, ct])
+
+    # Create a DataFrame with the full function path
+    df = pd.DataFrame(data, columns=['Full Function Path', 'ncalls', 'tottime', 'cumtime'])
+
+    # Include percall calculations
+    for i, row in enumerate(data):
+        full_func_path, ncalls, tottime, cumtime = row
+        percall_tottime = tottime / ncalls
+        percall_cumtime = cumtime / ncalls
+        # Update row with percall values
+        data[i] = [full_func_path, ncalls, tottime, percall_tottime, cumtime, percall_cumtime]
+
+    # Update DataFrame with percall columns
+    df = pd.DataFrame(data, columns=['Full Function Path', 'ncalls', 'tottime', 'percall (tottime)', 'cumtime', 'percall (cumtime)'])
+
+    # Sort DataFrame by 'percall (cumtime)' in descending order
+    df.sort_values(by='percall (cumtime)', ascending=False, inplace=True)
+
+    # Save DataFrame to CSV file
+    df.to_csv('profile.csv', index=False)
+
+    return df
+
+
