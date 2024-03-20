@@ -4,11 +4,14 @@ from sogym.struct import build_design, calculate_compliance, calculate_strains, 
 from sogym.rand_bc import generate_prompt
 import numpy as np
 import random
-import matplotlib.pyplot as plt
 from sogym.rand_bc import gen_randombc
 import cv2
 import torch
 import math
+# import matplotlib
+# matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
@@ -26,6 +29,7 @@ class sogym(gym.Env):
         self.N_actions = 6 
         self.counter=0  
         self.resolution = resolution
+        self.fig = plt.figure(dpi=100)
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
 
@@ -288,7 +292,7 @@ class sogym(gym.Env):
                     denominator = ((self.compliance / len(self.conditions['loaddof_x'])))
                     denominator = np.log(denominator)
                     reward = (1 / denominator ) * \
-                            (1 - abs(self.volume - self.conditions['volfrac']))**6
+                            (1 - abs(self.volume - self.conditions['volfrac']))**2
                 else:
                     reward = 0.0
 
@@ -352,139 +356,97 @@ class sogym(gym.Env):
         self.saved_volume.append(self.volume)
 
         return self.observation, reward, terminated, truncated, info
-    
-
-
-    def plot(self, mode='human',test=None, train_viz=True, axis = True):
+ 
+    def plot(self, train_viz=True, axis=True):
         plt.rcParams["figure.figsize"] = (10,10)        
+
         if train_viz:
-            dx = self.last_dx
-            dy = self.last_dy
-            nelx = self.last_nelx
-            nely = self.last_nely
-            x = self.last_x
-            y = self.last_y
-            condition_dict = self.last_conditions
+            dx, dy, nelx, nely, x, y, condition_dict, Phi = (
+                self.last_dx, self.last_dy, self.last_nelx, self.last_nely,
+                self.last_x, self.last_y, self.last_conditions, self.last_Phi
+            )
         else:
-            dx = self.dx
-            dy = self.dy
-            nelx = self.nelx
-            nely = self.nely
-            x = self.x
-            y = self.y
-            condition_dict = self.conditions
+            dx, dy, nelx, nely, x, y, condition_dict, Phi = (
+                self.dx, self.dy, self.nelx, self.nely,
+                self.x, self.y, self.conditions, self.Phi
+            )
 
-        fig = plt.figure()
-        ax = plt.subplot(111)
-        if train_viz:
-            for i, color in zip(range(0,self.last_Phi.shape[1]), self.render_colors):
-                ax.contourf(x,y,self.last_Phi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors=color)
+        self.fig.clear()
+        ax = self.fig.add_subplot(111)
+
+        if self.variables_plot == [] and not train_viz:
+            color = ['white']
         else:
-            if self.variables_plot==[]:
-                 for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
-                    ax.contourf(x,y,self.Phi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors='white')
-            else:
-                for i, color in zip(range(0,self.Phi.shape[1]), self.render_colors):
-                    ax.contourf(x,y,self.Phi[:,i].reshape((nely+1,nelx+1),order='F'),[0,1],colors=color)
-                    
-            
-        # Add a rectangle to show the domain boundary:
-        ax.add_patch(plt.Rectangle((0,0),dx, dy,clip_on=False,linewidth = 1,fill=False))
-        
-        if condition_dict['selected_boundary']==0.0:  # Left boundary
-            # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (0.0,dy*(condition_dict['boundary_position'])),
-                                    width = condition_dict['boundary_length']*dy, 
-                                    height = 0.1,
-                                    angle = 90,
-                                    hatch='/',
-                                        clip_on=False,
-                                        linewidth = 0))
+            color = self.render_colors
 
-            for i in range(condition_dict['n_loads']):
-                ax.arrow(dx-(condition_dict['magnitude_x'][i]*0.2),dy*(condition_dict['load_position'][i])-condition_dict['magnitude_y'][i]*0.2,
-                            dx= condition_dict['magnitude_x'][i]*0.2,
-                            dy = condition_dict['magnitude_y'][i]*0.2,
-                            width=0.2/8,
+        for i, c in zip(range(Phi.shape[1]), color):
+            ax.contourf(x, y, Phi[:, i].reshape((nely + 1, nelx + 1), order='F'), [0, 1], colors=[c])
+
+        ax.add_patch(plt.Rectangle((0, 0), dx, dy, clip_on=False, linewidth=1, fill=False))
+
+        boundary_conditions = [
+            (0.0, 'left', (0.0, dy * condition_dict['boundary_position']), 90),
+            (0.25, 'right', (dx + 0.1, dy * condition_dict['boundary_position']), 90),
+            (0.5, 'bottom', (dx * condition_dict['boundary_position'], dy), 0),
+            (0.75, 'top', (dx * condition_dict['boundary_position'], -0.1), 0)
+        ]
+
+        for boundary, name, xy, angle in boundary_conditions:
+            if condition_dict['selected_boundary'] == boundary:
+                ax.add_patch(plt.Rectangle(
+                    xy=xy,
+                    width=condition_dict['boundary_length'] * (dy if name in ['left', 'right'] else dx),
+                    height=0.1,
+                    angle=angle,
+                    hatch='/',
+                    clip_on=False,
+                    linewidth=0
+                ))
+
+                for i in range(condition_dict['n_loads']):
+                    load_pos = dy * condition_dict['load_position'][i] if name in ['left', 'right'] else dx * condition_dict['load_position'][i]
+                    arrow_pos = (
+                        (dx - condition_dict['magnitude_x'][i] * 0.2, load_pos - condition_dict['magnitude_y'][i] * 0.2)
+                        if name == 'left' else
+                        (0.0 - condition_dict['magnitude_x'][i] * 0.2, load_pos - condition_dict['magnitude_y'][i] * 0.2)
+                        if name == 'right' else
+                        (load_pos - condition_dict['magnitude_x'][i] * 0.2, -condition_dict['magnitude_y'][i] * 0.2)
+                        if name == 'bottom' else
+                        (load_pos - condition_dict['magnitude_x'][i] * 0.2, dy - condition_dict['magnitude_y'][i] * 0.2)
+                    )
+                    ax.arrow(*arrow_pos,
+                            dx=condition_dict['magnitude_x'][i] * 0.2,
+                            dy=condition_dict['magnitude_y'][i] * 0.2,
+                            width=0.2 / 8,
                             length_includes_head=True,
                             head_starts_at_zero=False)
-                
-        elif condition_dict['selected_boundary']==0.25: # Right boundary
-            # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (dx+0.1,dy*(condition_dict['boundary_position'])),
-                                    width = condition_dict['boundary_length']*dy, 
-                                    height = 0.1,
-                                    angle = 90,
-                                    hatch='/',
-                                        clip_on=False,
-                                        linewidth = 0))
 
-            for i in range(condition_dict['n_loads']):
-                ax.arrow(0.0-(condition_dict['magnitude_x'][i]*0.2),dy*(condition_dict['load_position'][i])-condition_dict['magnitude_y'][i]*0.2,
-                            dx= condition_dict['magnitude_x'][i]*0.2,
-                            dy = condition_dict['magnitude_y'][i]*0.2,
-                            width=0.2/8,
-                            length_includes_head=True,
-                            head_starts_at_zero=False)
-        elif condition_dict['selected_boundary']==0.5: # Bottom boundary
-            # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (dx*self.conditions['boundary_position'],dy),
-                                    width = self.conditions['boundary_length']*self.dx, 
-                                    height = 0.1,
-                                    angle = 0.0,
-                                    hatch='/',
-                                        clip_on=False,
-                                        linewidth = 0))
-
-            for i in range(condition_dict['n_loads']):
-                ax.arrow(dx*(condition_dict['load_position'][i])-condition_dict['magnitude_x'][i]*0.2,-(condition_dict['magnitude_y'][i]*0.2),
-                            dx= condition_dict['magnitude_x'][i]*0.2,
-                            dy = condition_dict['magnitude_y'][i]*0.2,
-                            width=0.2/8,
-                            length_includes_head=True,
-                            head_starts_at_zero=False)
-                
-        elif condition_dict['selected_boundary']==0.75: # Top boundary
-            # Add a blue rectangle to show the support 
-            ax.add_patch(plt.Rectangle(xy = (dx*condition_dict['boundary_position'],-0.1),
-                                    width = condition_dict['boundary_length']*dx, 
-                                    height = 0.1,
-                                    angle = 0.0,
-                                    hatch='/',
-                                        clip_on=False,
-                                        linewidth = 0))
-
-            for i in range(condition_dict['n_loads']):
-                ax.arrow(dx*(condition_dict['load_position'][i])-condition_dict['magnitude_x'][i]*0.2,dy-(condition_dict['magnitude_y'][i]*0.2),
-                            dx= condition_dict['magnitude_x'][i]*0.2,
-                            dy = condition_dict['magnitude_y'][i]*0.2,
-                            width=0.2/8,
-                            length_includes_head=True,
-                            head_starts_at_zero=False)
         if not axis:
             ax.set_axis_off()
-        plt.close()
-        return fig    
+
+        return self.fig
+
 
     def gen_image(self, resolution):
-        fig = self.plot(train_viz=False)
-        fig.tight_layout(pad=0)
-        fig.canvas.draw()
-        # Convert the canvas to an RGB numpy array
-        w, h = fig.canvas.get_width_height()
-        # Save the figure as a png
-        fig.savefig('test.png')
-        buf = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        self.plot(train_viz=False, axis=False)  # Pass the figure object to plot
+        self.fig.tight_layout(pad=0)
+
+        # Convert the figure to a numpy array without rendering it to the screen
+        self.fig.canvas.draw()
+        w, h = self.fig.canvas.get_width_height()
+        buf = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
         buf.shape = (h, w, 3)
-        # Flip the image vertically to match the Matplotlib coordinate system
-        buf = cv2.flip(buf, 0)
+
+        # Close the figure to free up memory
+        plt.close(self.fig)
+
         # Resize the image to the desired resolution using OpenCV
-        res = cv2.resize(buf, dsize=(resolution[0], resolution[1]), interpolation=cv2.INTER_CUBIC)
+        res = cv2.resize(buf, dsize=(resolution[0], resolution[1]), interpolation=cv2.INTER_NEAREST)
         # Convert res to channel first if needed
         if self.img_format == 'CHW':
             res = np.moveaxis(res, -1, 0)
-        return res
 
+        return res
 
     def check_connec(self):
         # Load grayscale image and threshold to create a binary image
