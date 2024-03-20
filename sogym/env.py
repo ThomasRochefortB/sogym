@@ -30,14 +30,15 @@ class sogym(gym.Env):
         self.counter=0  
         self.resolution = resolution
         self.fig = plt.figure(dpi=100)
+        self.image_resolution = 64
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
 
         self.action_space = spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
         if self.img_format == 'CHW':
-            img_shape = (3,128,128)
+            img_shape = (3,self.image_resolution,self.image_resolution)
         elif self.img_format == 'HWC':
-            img_shape = (128,128,3)
+            img_shape = (self.image_resolution,self.image_resolution,3)
 
         if self.observation_type =='dense':
             self.observation_space = spaces.Dict(
