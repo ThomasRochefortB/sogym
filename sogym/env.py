@@ -470,7 +470,6 @@ class sogym(gym.Env):
         }
         opposite_boundary_key = opposite_boundaries[boundary_key]
 
-
         boundary_slices = [(slice(int(self.conditions['boundary_position'] * self.nely),
                                 int((self.conditions['boundary_position'] + self.conditions['boundary_length']) * self.nely)),
                             0),
