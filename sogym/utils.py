@@ -5,6 +5,63 @@ import gymnasium as gym
 import torch as th
 from torch import nn
 import matplotlib.pyplot as plt
+import cProfile
+import pstats
+import pandas as pd
+
+def run_episodes(num_episodes, env):
+    for episode in range(num_episodes):
+        obs = env.reset()
+        done = False
+        while not done:
+            action = env.action_space.sample()  # Replace with your agent's action selection logic
+            obs, reward, done, truncated, info = env.step(action)
+
+def profile_and_analyze(num_episodes, env):
+    # Create a cProfile profiler
+    profiler = cProfile.Profile()
+
+    # Start profiling
+    profiler.enable()
+
+    # Run the episodes
+    run_episodes(num_episodes, env)
+
+    # Stop profiling
+    profiler.disable()
+
+    # Print the profiling statistics
+    stats = pstats.Stats(profiler)
+
+    # Extract profiling data
+    data = []
+    for func, (cc, nc, tt, ct, callers) in stats.stats.items():
+        filename, lineno, func_name = func
+        # Concatenate filename, line number, and function name to form the full path
+        full_func_path = f"{filename}:{lineno}({func_name})"
+        data.append([full_func_path, nc, tt, ct])
+
+    # Create a DataFrame with the full function path
+    df = pd.DataFrame(data, columns=['Full Function Path', 'ncalls', 'tottime', 'cumtime'])
+
+    # Include percall calculations
+    for i, row in enumerate(data):
+        full_func_path, ncalls, tottime, cumtime = row
+        percall_tottime = tottime / ncalls
+        percall_cumtime = cumtime / ncalls
+        # Update row with percall values
+        data[i] = [full_func_path, ncalls, tottime, percall_tottime, cumtime, percall_cumtime]
+
+    # Update DataFrame with percall columns
+    df = pd.DataFrame(data, columns=['Full Function Path', 'ncalls', 'tottime', 'percall (tottime)', 'cumtime', 'percall (cumtime)'])
+
+    # Sort DataFrame by 'percall (cumtime)' in descending order
+    df.sort_values(by='percall (cumtime)', ascending=False, inplace=True)
+
+    # Save DataFrame to CSV file
+    df.to_csv('profile.csv', index=False)
+
+    return df
 
 # Class defining the callback to log figures in tensorboard:
 class FigureRecorderCallback(BaseCallback):
@@ -22,6 +79,7 @@ class FigureRecorderCallback(BaseCallback):
             plt.close()
             
         return True
+    
 
 class ImageDictExtractor(BaseFeaturesExtractor):
 
@@ -94,34 +152,14 @@ class ImageDictExtractor(BaseFeaturesExtractor):
         return th.cat(encoded_tensor_list, dim=1)
     
 
-
-
-
 class CustomBoxDense(BaseFeaturesExtractor):
-    class AddGaussianNoise(nn.Module):
-        def __init__(self, mean=0.0, std=1.0,beta_size=9,device='cpu'):
-            super().__init__()
-            self.mean = mean
-            self.std = std
-            self.beta_size = beta_size
-            self.device = device
-        def forward(self, x):
-            if self.training:
-                ones = (th.randn(self.beta_size)* self.std + self.mean).to(self.device)
-                zeros= th.zeros(x.size()[1]-ones.size()[0]).to(self.device)
-                #concatenate the two tensors
-                noise = th.cat((ones,zeros),0).to(self.device)
-                x = x + noise
-            return x
     def __init__(self, observation_space: gym.spaces.Box, hidden_size: int = 32, noise_scale: float = 0.0,device='cpu',batch_norm=True):
         super().__init__(observation_space, features_dim=hidden_size)
         # We assume CxHxW images (channels first)
         # Re-ordering will be done by pre-preprocessing or wrapper
         self.noise_scale = noise_scale
         input_len = observation_space.shape[0]
-        gaussian_layer = self.AddGaussianNoise(std=self.noise_scale,device=device)
         self.linear = nn.Sequential(
-            gaussian_layer,
             nn.Linear(input_len, hidden_size),
             nn.BatchNorm1d(hidden_size),
             nn.ReLU(),
@@ -130,10 +168,8 @@ class CustomBoxDense(BaseFeaturesExtractor):
             nn.ReLU(),
             nn.Flatten(),
         )
-
         if batch_norm == False:
             self.linear = nn.Sequential(
-                gaussian_layer,
                 nn.Linear(input_len, hidden_size),
                 nn.ReLU(),
                 nn.Linear(hidden_size, hidden_size),
@@ -144,63 +180,6 @@ class CustomBoxDense(BaseFeaturesExtractor):
     def forward(self, observations: th.Tensor) -> th.Tensor:
         return self.linear(observations)
 
-import cProfile
-import pstats
-import pandas as pd
-from sogym.env import sogym
 
-def run_episodes(num_episodes, env):
-    for episode in range(num_episodes):
-        obs = env.reset()
-        done = False
-        while not done:
-            action = env.action_space.sample()  # Replace with your agent's action selection logic
-            obs, reward, done, truncated, info = env.step(action)
-
-def profile_and_analyze(num_episodes, env):
-    # Create a cProfile profiler
-    profiler = cProfile.Profile()
-
-    # Start profiling
-    profiler.enable()
-
-    # Run the episodes
-    run_episodes(num_episodes, env)
-
-    # Stop profiling
-    profiler.disable()
-
-    # Print the profiling statistics
-    stats = pstats.Stats(profiler)
-
-    # Extract profiling data
-    data = []
-    for func, (cc, nc, tt, ct, callers) in stats.stats.items():
-        filename, lineno, func_name = func
-        # Concatenate filename, line number, and function name to form the full path
-        full_func_path = f"{filename}:{lineno}({func_name})"
-        data.append([full_func_path, nc, tt, ct])
-
-    # Create a DataFrame with the full function path
-    df = pd.DataFrame(data, columns=['Full Function Path', 'ncalls', 'tottime', 'cumtime'])
-
-    # Include percall calculations
-    for i, row in enumerate(data):
-        full_func_path, ncalls, tottime, cumtime = row
-        percall_tottime = tottime / ncalls
-        percall_cumtime = cumtime / ncalls
-        # Update row with percall values
-        data[i] = [full_func_path, ncalls, tottime, percall_tottime, cumtime, percall_cumtime]
-
-    # Update DataFrame with percall columns
-    df = pd.DataFrame(data, columns=['Full Function Path', 'ncalls', 'tottime', 'percall (tottime)', 'cumtime', 'percall (cumtime)'])
-
-    # Sort DataFrame by 'percall (cumtime)' in descending order
-    df.sort_values(by='percall (cumtime)', ascending=False, inplace=True)
-
-    # Save DataFrame to CSV file
-    df.to_csv('profile.csv', index=False)
-
-    return df
 
 

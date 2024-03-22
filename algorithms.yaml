@@ -1,0 +1,50 @@
+common:
+  tb_log: &tb_log "./tb_logs"
+
+PPO:
+  learning_rate: 0.0003
+  n_steps: 64
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  target_kl: null
+  tensorboard_log: *tb_log
+
+SAC:
+  verbose: 0
+  policy_kwargs:
+    net_arch:
+      pi:
+        - 512
+        - 512
+        - 512
+      qf:
+        - 512
+        - 512
+        - 512
+  learning_starts: 4096
+  batch_size: 8192
+  train_freq: 8
+  gradient_steps: 1
+  tensorboard_log: *tb_log
+
+TD3:
+  verbose: 0
+  policy_kwargs:
+    net_arch:
+      - 512
+      - 512
+      - 512
+  action_noise:
+    mean: 0.0
+    sigma: 0.5
+  learning_starts: 4096
+  batch_size: 8192
+  train_freq: 8
+  gradient_steps: 1
+  tensorboard_log: *tb_log

@@ -52,7 +52,7 @@ class sogym(gym.Env):
         
         elif self.observation_type =='box_dense':
             self.observation_space = spaces.Box(low=-np.pi, high=np.pi, shape=(27+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
-
+            
 
         elif self.observation_type =='image':
             self.observation_space = spaces.Dict(
@@ -184,179 +184,158 @@ class sogym(gym.Env):
         return (self.observation,info )
         
         
-    def step(self, action,evaluate=True):
-        self.action_count+=1   # One action is taken
-       
-        self.new_variables=(self.xmax.squeeze()-self.xmin.squeeze())/(2)*(action-1)+self.xmax.squeeze()  # We convert from  [-1,1] to [xmin,xmax]
+    def step(self, action, evaluate=True):
+        self.action_count += 1
 
-        # The design variables are infered from the two endpoints and the two thicknesses:
-        x_center = (self.new_variables[0] + self.new_variables[2])/2
-        y_center = (self.new_variables[1]+self.new_variables[3])/2
-        L = np.sqrt((self.new_variables[0]-self.new_variables[2])**2 + (self.new_variables[1]-self.new_variables[3])**2  )/2
+        # Convert action from [-1, 1] to [xmin, xmax]
+        self.new_variables = (self.xmax.squeeze() - self.xmin.squeeze()) / 2 * (action - 1) + self.xmax.squeeze()
+
+        # Infer design variables from the two endpoints and the two thicknesses
+        x_center = (self.new_variables[0] + self.new_variables[2]) / 2
+        y_center = (self.new_variables[1] + self.new_variables[3]) / 2
+        L = np.sqrt((self.new_variables[0] - self.new_variables[2])**2 + (self.new_variables[1] - self.new_variables[3])**2) / 2
         t_1 = self.new_variables[4]
-        t_2 =self.new_variables[5]
-        theta =  np.arctan2(self.new_variables[3] - self.new_variables[1], self.new_variables[2]- self.new_variables[0])
+        t_2 = self.new_variables[5]
+        theta = np.arctan2(self.new_variables[3] - self.new_variables[1], self.new_variables[2] - self.new_variables[0])
 
-        # We build a new design variable vector
-        formatted_variables = np.array([x_center,y_center, L, t_1, t_2, theta])
-        self.variables[(self.action_count-1)*self.N_actions:self.action_count*self.N_actions,0]= formatted_variables
+        # Build a new design variable vector
+        formatted_variables = np.array([x_center, y_center, L, t_1, t_2, theta])
+        self.variables[(self.action_count - 1) * self.N_actions:self.action_count * self.N_actions, 0] = formatted_variables
         self.variables_plot.append(formatted_variables)
 
-        # We build the topology with the new design variables:
-        self.H, self.Phimax,self.Phi, den=build_design(np.array(self.variables_plot).T, self.dx,self.dy, self.nelx,self.nely)    # self.H is the Heaviside projection of the design variables and self.Phi are the design surfaces.        
-        nEle = self.nelx*self.nely
-        nNod=(self.nelx+1)*(self.nely+1)
-        nodMat = np.reshape(np.array(range(0,nNod)),(1+self.nely,1+self.nelx),order='F')                    # maxtrix of nodes numbers (int32)
-        edofVec = np.reshape(2*nodMat[0:-1,0:-1],(nEle,1),order='F')
-        edofMat = edofVec + np.array([0, 1, 2*self.nely+2,2*self.nely+3, 2*self.nely+4, 2*self.nely+5, 2, 3])              # connectivity matrix
-        eleNodesID = edofMat[:,0:8:2]/2   
-        #FEA
-        self.den=np.sum(self.H[eleNodesID.astype('int')],1)/4 
-        self.volume=sum(self.den)*self.EW*self.EH/(self.dx*self.dy)
-        
+        # Build the topology with the new design variables
+        self.H, self.Phimax, self.Phi, den = build_design(np.array(self.variables_plot).T, self.dx, self.dy, self.nelx, self.nely)
+
+        # Calculate volume
+        nEle = self.nelx * self.nely
+        nNod = (self.nelx + 1) * (self.nely + 1)
+        nodMat = np.reshape(np.array(range(0, nNod)), (1 + self.nely, 1 + self.nelx), order='F')
+        edofVec = np.reshape(2 * nodMat[0:-1, 0:-1], (nEle, 1), order='F')
+        edofMat = edofVec + np.array([0, 1, 2 * self.nely + 2, 2 * self.nely + 3, 2 * self.nely + 4, 2 * self.nely + 5, 2, 3])
+        eleNodesID = edofMat[:, 0:8:2] / 2
+        self.den = np.sum(self.H[eleNodesID.astype('int')], 1) / 4
+        self.volume = sum(self.den) * self.EW * self.EH / (self.dx * self.dy)
+
         truncated = False
-        # The reward function is the sparse reward given only at the end of the episode if the desired volume fraction is respected.
-        if self.action_count<self.N_components: # We are not at the end of the episode
-            reward=0.0
-            terminated=False
 
-            if self.observation_type=='image':
-                
-                self.compliance, self.volume, self.U, self.F = calculate_compliance(
-                self.H, self.conditions, self.dx, self.dy, self.nelx, self.nely)  # Calculate compliance, volume, and stress
-                # Calculate strain and stress fields
-                nDof = self.U.shape[0]  # Total number of DOFs
-                nNod = nDof // 2       # Number of nodes
-
-                # Create boolean masks for x-displacement and y-displacement DOFs
-                mask_x = np.arange(nDof) % 2 == 0
-                mask_y = np.arange(nDof) % 2 == 1
-
-                # Extract x-displacement and y-displacement DOFs
-                x_dofs = self.U[mask_x]
-                y_dofs = self.U[mask_y]
-
-                # Reshape displacement fields to match the structural domain grid
-                x_displacement = x_dofs.reshape((self.nely+1, self.nelx+1), order='F')
-                y_displacement = y_dofs.reshape((self.nely+1, self.nelx+1), order='F')
-
-                strain_xx, strain_yy, strain_xy = calculate_strains(x_displacement, y_displacement)
-
-                stress_xx, stress_yy, stress_xy = calculate_stresses(strain_xx, strain_yy, strain_xy)
-                # Calculate von Mises stress
-                self.von_mises_stress = np.sqrt(stress_xx**2 - stress_xx*stress_yy + stress_yy**2 + 3*stress_xy**2)
-
-        else:  # We are at the end of the episode
-            terminated = True
-            self.last_Phi = self.Phi
-            self.last_conditions, self.last_nelx, self.last_nely, self.last_x, self.last_y, self.last_dx, self.last_dy = \
-                self.conditions, self.nelx, self.nely, self.x, self.y, self.dx, self.dy
-            self.compliance, self.volume, self.U, self.F = calculate_compliance(
-                self.H, self.conditions, self.dx, self.dy, self.nelx, self.nely)  # Calculate compliance, volume, and stress
-             # Calculate strain and stress fields
-            nDof = self.U.shape[0]  # Total number of DOFs
-            nNod = nDof // 2       # Number of nodes
-
-            # Create boolean masks for x-displacement and y-displacement DOFs
-            mask_x = np.arange(nDof) % 2 == 0
-            mask_y = np.arange(nDof) % 2 == 1
-
-            # Extract x-displacement and y-displacement DOFs
-            x_dofs = self.U[mask_x]
-            y_dofs = self.U[mask_y]
-
-            # Reshape displacement fields to match the structural domain grid
-            x_displacement = x_dofs.reshape((self.nely+1, self.nelx+1), order='F')
-            y_displacement = y_dofs.reshape((self.nely+1, self.nelx+1), order='F')
-
-            strain_xx, strain_yy, strain_xy = calculate_strains(x_displacement, y_displacement)
-
-            stress_xx, stress_yy, stress_xy = calculate_stresses(strain_xx, strain_yy, strain_xy)
-            # Calculate von Mises stress
-            self.von_mises_stress = np.sqrt(stress_xx**2 - stress_xx*stress_yy + stress_yy**2 + 3*stress_xy**2)
-
-            # Check if connectivity check is required
-            if self.check_connectivity:
-                is_connected = self.check_connec()
-            else:
-                is_connected = True  # Assume connectivity check is not required or passed
-
-            if self.vol_constraint_type == 'hard':
-                if self.volume <= self.conditions['volfrac'] and is_connected:
-                    denominator = ((self.compliance / len(self.conditions['loaddof_x'])))
-                    denominator = np.log(denominator)
-                    reward = (1 / denominator)
-                else:
-                    reward = 0.0
-            else:
-                if is_connected:
-                    denominator = ((self.compliance / len(self.conditions['loaddof_x'])))
-                    denominator = np.log(denominator)
-                    reward = (1 / denominator ) * \
-                            (1 - abs(self.volume - self.conditions['volfrac']))**2
-                else:
-                    reward = 0.0
-
-            if math.isnan(reward):  # Catch potential NaN rewards
-                reward = 0.0
-
-        info={}
-        if self.observation_type=='dense':
-            self.observation = {"beta":np.float32(self.beta),
-                    "design_variables":np.float32(self.variables.flatten())/np.pi,
-                    "volume":np.array([self.volume],dtype=np.float32),
-                    "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
-                    }
-        elif self.observation_type=='box_dense':        
-            self.observation=np.concatenate(
-                (np.float32(self.beta),
-                 np.array([self.volume],dtype=np.float32),
-                 np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
-                 np.float32(self.variables.flatten())/np.pi)
-                 ,axis=0)
-                 
-      
-        elif self.observation_type == 'image':
-            # Use masked arrays to hide regions without material
-            von_mises_stress_masked = np.ma.masked_where(self.H.reshape((self.nely+1, self.nelx+1), order='F') == 0, self.von_mises_stress)
-
-            # Normalize the von Mises stress field to the range [0, 255]
-            von_mises_stress_normalized = (von_mises_stress_masked - von_mises_stress_masked.min()) / (von_mises_stress_masked.max() - von_mises_stress_masked.min() + 1e-8)
-            von_mises_stress_normalized = (von_mises_stress_normalized * 255).astype(np.uint8)
-
-            # Fill the masked regions with a specific value (e.g., 255 for white)
-            von_mises_stress_normalized = np.ma.filled(von_mises_stress_normalized, 255)
-
-            # Resize the von Mises stress field to the desired resolution
-            von_mises_stress_resized = cv2.resize(von_mises_stress_normalized, dsize=(self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
-
-            # Reshape the von Mises stress field to match the image format (e.g., CHW)
-            if self.img_format == 'CHW':
-                von_mises_stress_image = np.expand_dims(von_mises_stress_resized, axis=0)
-                von_mises_stress_image = np.repeat(von_mises_stress_image, 3, axis=0)  # Repeat to create RGB channels
-            elif self.img_format == 'HWC':
-                von_mises_stress_image = np.expand_dims(von_mises_stress_resized, axis=-1)
-                von_mises_stress_image = np.repeat(von_mises_stress_image, 3, axis=-1)  # Repeat to create RGB channels
-
-            self.observation = {"image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
-                                "beta": np.float32(self.beta),
-                                "design_variables": np.float32(self.variables.flatten()) / np.pi,
-                                "volume": np.array([self.volume], dtype=np.float32),
-                                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
-                                "von_mises_stress": von_mises_stress_image}
-
-        elif self.observation_type == 'text_dict':
-            self.observation = {
-                "prompt": np.float32(self.model_output),
-                    "design_variables":np.float32(self.variables.flatten())/np.pi,
-                    "volume":np.array([self.volume],dtype=np.float32),
-                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
-            }
+        if self.action_count < self.N_components:
+            # Not at the end of the episode
+            reward = 0.0
+            terminated = False
+            self.calculate_compliance_and_stress()
         else:
-            raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
+            # At the end of the episode
+            terminated = True
+            self.save_last_state()
+            self.calculate_compliance_and_stress()
+
+            # Check connectivity if required
+            is_connected = self.check_connec() if self.check_connectivity else True
+
+            reward = self.calculate_reward(is_connected)
+
+        info = {}
+        self.update_observation()
         self.saved_volume.append(self.volume)
 
         return self.observation, reward, terminated, truncated, info
+
+    def calculate_compliance_and_stress(self):
+        self.compliance, self.volume, self.U, self.F = calculate_compliance(
+            self.H, self.conditions, self.dx, self.dy, self.nelx, self.nely)
+
+        nDof = self.U.shape[0]
+        nNod = nDof // 2
+
+        mask_x = np.arange(nDof) % 2 == 0
+        mask_y = np.arange(nDof) % 2 == 1
+
+        x_dofs = self.U[mask_x]
+        y_dofs = self.U[mask_y]
+
+        x_displacement = x_dofs.reshape((self.nely + 1, self.nelx + 1), order='F')
+        y_displacement = y_dofs.reshape((self.nely + 1, self.nelx + 1), order='F')
+
+        strain_xx, strain_yy, strain_xy = calculate_strains(x_displacement, y_displacement)
+        stress_xx, stress_yy, stress_xy = calculate_stresses(strain_xx, strain_yy, strain_xy)
+
+        self.von_mises_stress = np.sqrt(stress_xx**2 - stress_xx * stress_yy + stress_yy**2 + 3 * stress_xy**2)
+
+    def save_last_state(self):
+        self.last_Phi = self.Phi
+        self.last_conditions, self.last_nelx, self.last_nely, self.last_x, self.last_y, self.last_dx, self.last_dy = \
+            self.conditions, self.nelx, self.nely, self.x, self.y, self.dx, self.dy
+
+    def calculate_reward(self, is_connected):
+        if self.vol_constraint_type == 'hard':
+            if self.volume <= self.conditions['volfrac'] and is_connected:
+                denominator = np.log(self.compliance / len(self.conditions['loaddof_x']))
+                reward = 1 / denominator
+            else:
+                reward = 0.0
+        else:
+            if is_connected:
+                denominator = np.log(self.compliance / len(self.conditions['loaddof_x']))
+                reward = (1 / denominator) * (1 - abs(self.volume - self.conditions['volfrac']))**2
+            else:
+                reward = 0.0
+
+        if math.isnan(reward):
+            reward = 0.0
+
+        return reward
+
+    def update_observation(self):
+        if self.observation_type == 'dense':
+            self.observation = {
+                "beta": np.float32(self.beta),
+                "design_variables": np.float32(self.variables.flatten()) / np.pi,
+                "volume": np.array([self.volume], dtype=np.float32),
+                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
+            }
+        elif self.observation_type == 'box_dense':
+            self.observation = np.concatenate(
+                (np.float32(self.beta),
+                np.array([self.volume], dtype=np.float32),
+                np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
+                np.float32(self.variables.flatten()) / np.pi),
+                axis=0)
+        elif self.observation_type == 'image':
+            von_mises_stress_image = self.process_von_mises_stress()
+            self.observation = {
+                "image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
+                "beta": np.float32(self.beta),
+                "design_variables": np.float32(self.variables.flatten()) / np.pi,
+                "volume": np.array([self.volume], dtype=np.float32),
+                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
+                "von_mises_stress": von_mises_stress_image
+            }
+        elif self.observation_type == 'text_dict':
+            self.observation = {
+                "prompt": np.float32(self.model_output),
+                "design_variables": np.float32(self.variables.flatten()) / np.pi,
+                "volume": np.array([self.volume], dtype=np.float32),
+                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
+            }
+        else:
+            raise ValueError('Invalid observation space type. Only "dense", "box_dense", "text_dict", and "image" are supported.')
+
+    def process_von_mises_stress(self):
+        von_mises_stress_masked = np.ma.masked_where(self.H.reshape((self.nely + 1, self.nelx + 1), order='F') == 0, self.von_mises_stress)
+        von_mises_stress_normalized = (von_mises_stress_masked - von_mises_stress_masked.min()) / (von_mises_stress_masked.max() - von_mises_stress_masked.min() + 1e-8)
+        von_mises_stress_normalized = (von_mises_stress_normalized * 255).astype(np.uint8)
+        von_mises_stress_normalized = np.ma.filled(von_mises_stress_normalized, 255)
+        von_mises_stress_resized = cv2.resize(von_mises_stress_normalized, dsize=(self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
+
+        if self.img_format == 'CHW':
+            von_mises_stress_image = np.expand_dims(von_mises_stress_resized, axis=0)
+            von_mises_stress_image = np.repeat(von_mises_stress_image, 3, axis=0)
+        elif self.img_format == 'HWC':
+            von_mises_stress_image = np.expand_dims(von_mises_stress_resized, axis=-1)
+            von_mises_stress_image = np.repeat(von_mises_stress_image, 3, axis=-1)
+
+        return von_mises_stress_image
+
  
     def plot(self, train_viz=True, axis=True):
         plt.rcParams["figure.figsize"] = (10,10)        
