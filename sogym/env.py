@@ -88,7 +88,7 @@ class sogym(gym.Env):
         seed = self.seed
         if self.mode == 'test':
             self.counter+=1
-            if self.counter>9:
+            if self.counter>11:
                 self.counter=0
             self.dx, self.dy, self.nelx, self.nely, self.conditions = gen_randombc(seed=self.counter, resolution=self.resolution)
         else:
