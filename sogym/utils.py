@@ -186,5 +186,37 @@ class CustomBoxDense(BaseFeaturesExtractor):
         return self.linear(observations)
 
 
+class MaxRewardCallback(BaseCallback):
+    def __init__(self, verbose=0):
+        super(MaxRewardCallback, self).__init__(verbose)
+        self.max_reward = -float('inf')
+
+    def _on_step(self) -> bool:
+        reward = self.training_env.get_attr('reward')[0]
+        self.max_reward = max(self.max_reward, reward)
+        return True
+
+    def _on_rollout_end(self) -> None:
+        self.logger.record('max_reward', self.max_reward)
+        self.max_reward = -float('inf')
+
+
+class GradientNormCallback(BaseCallback):
+    def __init__(self, verbose=0):
+        super(GradientNormCallback, self).__init__(verbose)
+
+    def _on_step(self) -> bool:
+        # You can add any necessary logic here
+        return True
+
+    def _on_rollout_end(self) -> None:
+        # Calculate the gradient norm
+        total_norm = 0
+        for param in self.model.policy.parameters():
+            if param.grad is not None:
+                param_norm = param.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        total_norm = total_norm ** 0.5
+        self.logger.record('gradient_norm', total_norm)
 
 
