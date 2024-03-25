@@ -1,8 +1,11 @@
 common:
   tb_log: &tb_log "./tb_logs"
+  net_arch: &net_arch     # Same 2 layers of 256 for critic and actor indepent of off-policy or on-policy
+    - 256
+    - 256
 
 PPO:
-  learning_rate: 0.000
+  learning_rate: 0.0003
   n_steps: 64
   batch_size: 64
   n_epochs: 10
@@ -17,16 +20,6 @@ PPO:
 
 SAC:
   verbose: 0
-  policy_kwargs:
-    net_arch:
-      pi:
-        - 512
-        - 512
-        - 512
-      qf:
-        - 512
-        - 512
-        - 512
   learning_starts: 4096
   batch_size: 8192
   train_freq: 8
@@ -35,11 +28,6 @@ SAC:
 
 TD3:
   verbose: 0
-  policy_kwargs:
-    net_arch:
-      - 512
-      - 512
-      - 512
   action_noise:
     mean: 0.0
     sigma: 0.5
