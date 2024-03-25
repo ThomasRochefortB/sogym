@@ -106,7 +106,7 @@ class ImageDictExtractor(BaseFeaturesExtractor):
         # so go over all the spaces and compute output feature sizes
         for key, subspace in observation_space.spaces.items():
             
-            if key =='image':
+            if key =='image' or key=='von_mises_stress':
                 #image is channel-first in SB3 convention: (C, H, W)
                 #default is 64,128,3
                 input_h ,input_w, input_c = subspace.shape[1],subspace.shape[2],subspace.shape[0]
@@ -124,7 +124,7 @@ class ImageDictExtractor(BaseFeaturesExtractor):
                                             )
                 total_concat_size+= ((input_w * input_h) // 64)  * self.last_conv_size
             
-            elif key == "design_variables" or key=="volume" or key=="n_steps_left" or key =="conditions":
+            elif key == "design_variables" or key=="volume" or key=="n_steps_left" or key =="conditions" or key=="score":
                 # run through a simple MLP
                 extractors[key] = nn.Sequential(
                                                 nn.Linear(subspace.shape[0], self.mlp_size),
