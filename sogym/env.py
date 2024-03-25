@@ -31,6 +31,7 @@ class sogym(gym.Env):
         self.resolution = resolution
         self.fig = plt.figure(dpi=100)
         self.image_resolution = 64
+        self.reward = 0.0
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
 
@@ -62,7 +63,8 @@ class sogym(gym.Env):
                                             "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
                                             "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
                                             "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
-                                            "von_mises_stress":spaces.Box(0,255,img_shape,dtype=np.uint8) 
+                                            "von_mises_stress":spaces.Box(0,255,img_shape,dtype=np.uint8) ,
+                                            "score": spaces.Box(-np.inf,np.inf,(1,),dtype=np.float32)
                                             }
                                         )   
         elif self.observation_type =='text_dict':
@@ -170,7 +172,9 @@ class sogym(gym.Env):
                                 "design_variables": np.float32(self.variables.flatten()),
                                 "volume": np.array([0.0], dtype=np.float32),
                                 "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
-                                "von_mises_stress": empty_von_mises_stress}
+                                "von_mises_stress": empty_von_mises_stress,
+                                "score": np.array([0.0], dtype=np.float32)
+                                }
             
         elif self.observation_type == 'text_dict':
             self.observation = {
@@ -222,7 +226,7 @@ class sogym(gym.Env):
 
         if self.action_count < self.N_components:
             # Not at the end of the episode
-            reward = 0.0
+            self.reward = 0.0
             terminated = False
             self.calculate_compliance_and_stress()
         else:
@@ -234,13 +238,13 @@ class sogym(gym.Env):
             # Check connectivity if required
             is_connected = self.check_connec() if self.check_connectivity else True
 
-            reward = self.calculate_reward(is_connected)
+            self.reward = self.calculate_reward(is_connected)
 
         info = {}
         self.update_observation()
         self.saved_volume.append(self.volume)
 
-        return self.observation, reward, terminated, truncated, info
+        return self.observation, self.reward, terminated, truncated, info
 
     def calculate_compliance_and_stress(self):
         self.compliance, self.volume, self.U, self.F = calculate_compliance(
@@ -310,7 +314,8 @@ class sogym(gym.Env):
                 "design_variables": np.float32(self.variables.flatten()) / np.pi,
                 "volume": np.array([self.volume], dtype=np.float32),
                 "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
-                "von_mises_stress": von_mises_stress_image
+                "von_mises_stress": von_mises_stress_image,
+                "score":np.array([1/ np.log(self.compliance / len(self.conditions['loaddof_x']))],dtype=np.float32)
             }
         elif self.observation_type == 'text_dict':
             self.observation = {
