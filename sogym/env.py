@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,resolution = 100, observation_type = 'dense',
+    def __init__(self,N_components=18,resolution = 100, observation_type = 'dense',
                  mode = 'train',img_format='CHW',check_connectivity = False, 
                  seed=None,vol_constraint_type='hard',model=None,tokenizer=None):
      
@@ -40,7 +40,7 @@ class sogym(gym.Env):
             img_shape = (3,self.image_resolution,self.image_resolution)
         elif self.img_format == 'HWC':
             img_shape = (self.image_resolution,self.image_resolution,3)
-
+        print("Using:",observation_type,"observation space")
         if self.observation_type =='dense':
             self.observation_space = spaces.Dict(
                                         {
@@ -147,6 +147,7 @@ class sogym(gym.Env):
         self.plot_conditions = self.out_conditions
         # I need to initialize an empty instance of Phi:
         self.Phi = np.zeros(((self.nelx+1)*(self.nely+1), self.N_components))
+
         if self.observation_type=='dense':
             self.observation={"beta":np.float32(self.beta),
                             "design_variables":np.float32(self.variables.flatten()),
@@ -161,7 +162,7 @@ class sogym(gym.Env):
                  np.float32(self.variables.flatten()))
                  ,axis=0)
 
-        if self.observation_type == 'image':
+        elif self.observation_type == 'image':
             if self.img_format == 'CHW':
                 empty_von_mises_stress = np.zeros((3, self.image_resolution, self.image_resolution), dtype=np.uint8)
             elif self.img_format == 'HWC':
@@ -184,7 +185,6 @@ class sogym(gym.Env):
                 "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
             }
         else:
-
             raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
         info ={}
         return (self.observation,info )

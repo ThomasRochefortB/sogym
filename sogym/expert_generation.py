@@ -18,39 +18,59 @@ import glob
 import re
 from multiprocessing import Pool, cpu_count
 import pickle
+import json
+import glob
+import pickle
+import numpy as np
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
+import numpy as np
+
 
 # Let's load an expert sample:
-import json
 def count_top (filepath):
-    #function to count the number of .json in the /dataset folder:
+    """
+    Count the number of .json files in the specified directory.
+
+    Args:
+        filepath (str): Path to the directory.
+
+    Returns:
+        int: Number of .json files in the directory.
+    """
     path, dirs, files = next(os.walk(filepath))
     file_count = len(files)
     return file_count
 
-
-
 def load_top (filepath):
-    #function to load the .json in the /dataset folder:
-    obj_text = codecs.open(filepath, 'r', encoding='utf-8').read()
-    dict = json.loads(obj_text)
-    
-    return dict
-
-        
-def generate_mmc_solutions(key,dataset_folder):
     """
-    This function generates a single solution for the mmc problem and saves it in the dataset folder
+    Load a .json file from the specified filepath.
 
     Args:
-        key (int): The key for the multiprocessing
+        filepath (str): Path to the .json file.
 
     Returns:
-        None: The function saves the solution in the dataset folder
-
+        dict: Loaded JSON data as a dictionary.
     """
-    env = sogym(mode='train',observation_type='dense',vol_constraint_type='soft',seed=key)
+    obj_text = codecs.open(filepath, 'r', encoding='utf-8').read()
+    dict = json.loads(obj_text)
+
+    return dict
+
+def generate_mmc_solutions(key,dataset_folder):
+    """
+    Generate a single solution for the MMC problem and save it in the dataset folder.
+
+    Args:
+        key (int): The key for multiprocessing.
+        dataset_folder (str): Path to the dataset folder.
+
+    Returns:
+        None: The function saves the solution in the dataset folder.
+    """
+    env = sogym(mode='train',observation_type='dense',vol_constraint_type='soft',seed=key,resolution=50)
     obs = env.reset()
-    xval, f0val, num_iter, H, Phimax, allPhi, den,N=  run_mmc(env.conditions,env.nelx,env.nely,env.dx,env.dy,plotting='nothing',verbose=0)
+    xval, f0val, num_iter, H, Phimax, allPhi, den,N, cfg =  run_mmc(env.conditions,env.nelx,env.nely,env.dx,env.dy,plotting='nothing',verbose=1)
     #out_conditions = train_env.conditions.copy()
     out_conditions = env.conditions.copy()
 
@@ -89,13 +109,14 @@ def generate_mmc_solutions(key,dataset_folder):
         json.dump(save_dict, f)
 
 def generate_dataset(dataset_folder, num_threads=1, num_samples=10):
-    '''
-    This function generates a dataset of solutions for the mmc problem and saves it in the dataset folder
+    """
+    Generate a dataset of solutions for the MMC problem and save it in the dataset folder.
 
     Args:
+        dataset_folder (str): Path to the dataset folder.
         num_threads (int, optional): Number of threads to use for multiprocessing. Defaults to 1.
         num_samples (int, optional): Number of samples to generate. Defaults to 10.
-    '''
+    """
     if num_threads >1:
         nbrAvailCores=num_threads
         pool = mp.Pool(processes=nbrAvailCores)
@@ -110,7 +131,15 @@ def generate_dataset(dataset_folder, num_threads=1, num_samples=10):
 
 
 def generate_trajectory(filepath):
+    """
+    Generate a trajectory from the specified JSON file.
 
+    Args:
+        filepath (str): Path to the JSON file.
+
+    Returns:
+        None: The function saves the generated trajectory as a pickle file.
+    """
     env = sogym(mode='train',observation_type='box_dense',vol_constraint_type='soft')
     obs=env.reset()
 
@@ -164,7 +193,6 @@ def generate_trajectory(filepath):
     domain_vector = np.array([data['dx'],data['dy']])
     # Let's concatenate everything into a single vector 'beta':
     beta = np.concatenate((support_vector.flatten(order='F'),load_vector.flatten(order='F'),volfrac_vector,domain_vector),axis=None) # The new beta vector is a 25 x 1 vector
-    
     components=np.split(np.array(design_variables),8)
     all_permutations = list(permutations(components))
     selected_permutations = random.sample(all_permutations, 10)
@@ -215,33 +243,45 @@ def generate_trajectory(filepath):
         pickle.dump(trajectories, fp)
 
 
-
 def generate_all(num_processes = 4):
+    """
+    Generate trajectories for all JSON files in the specified directory using multiprocessing.
 
+    Args:
+        num_processes (int, optional): Number of processes to use for multiprocessing. Defaults to 4.
+    """
     files = glob.glob('dataset/topologies/mmc/*.json')
-    print(len(files))
-
-    # Define the number of processes
-
+    print("Length:",len(files))
     with ProcessPoolExecutor(max_workers=num_processes) as executor:
-        # Wrap the files list with tqdm for a progress bar
-        # Use executor.map with the wrapped files list
         list(tqdm(executor.map(generate_trajectory, files), total=len(files), desc="Generating Trajectories"))
 
 
-import glob
-import pickle
-import numpy as np
-from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
-
 def list_unique_timestamps(folder='dataset/trajectories'):
+    """
+    List unique timestamps from the trajectory files in the specified folder.
+
+    Args:
+        folder (str, optional): Path to the folder containing trajectory files. Defaults to 'dataset/trajectories'.
+
+    Returns:
+        list: List of unique timestamps.
+    """
     files = glob.glob('{}/*_trajectories.pkl'.format(folder))
     files_key = [file.split('/')[-1].split('_trajectories')[0] for file in files]
     return files_key
 
 def load_trajectory(filename):
+    """
+    Load a trajectory from the specified file.
+
+    Args:
+        filename (str): Name of the trajectory file (without extension).
+
+    Returns:
+        list: List of Trajectory objects.
+    """
     trajectories = []
+
     with open('dataset/trajectories/{}_trajectories.pkl'.format(filename), 'rb') as f:
         all_permutation_data = pickle.load(f)
 
@@ -274,6 +314,15 @@ def load_trajectory(filename):
     return trajectories
 
 def load_all_trajectories(n_workers=4):
+    """
+    Load all trajectories using multithreading.
+
+    Args:
+        n_workers (int, optional): Number of worker threads to use. Defaults to 4.
+
+    Returns:
+        list: List of all loaded trajectories.
+    """
     filenames = list_unique_timestamps()
     trajectories = []
     
@@ -284,3 +333,70 @@ def load_all_trajectories(n_workers=4):
         trajectories.extend(traj)
     
     return trajectories
+
+from gymnasium import spaces
+
+def generate_expert_dataset(mmc_solution, env_kwargs=None, plot_terminated=False):
+    env = sogym(**env_kwargs) if env_kwargs else sogym()
+    obs = env.reset()
+
+    def find_endpoints(x_center, y_center, L, theta):
+        x_1 = x_center - L * np.cos(theta)
+        x_2 = x_center + L * np.cos(theta)
+        y_1 = y_center - L * np.sin(theta)
+        y_2 = y_center + L * np.sin(theta)
+
+        x_max = env.xmax[0]
+        x_min = env.xmin[0]
+
+        y_max = env.xmax[1]
+        y_min = env.xmin[1]
+        # Clip x and y between min and max
+        x_1 = np.clip(x_1, x_min, x_max)
+        x_2 = np.clip(x_2, x_min, x_max)
+        y_1 = np.clip(y_1, y_min, y_max)
+        y_2 = np.clip(y_2, y_min, y_max)
+        return np.array([x_1[0], y_1[0], x_2[0], y_2[0]])
+
+    def variables_2_actions(endpoints):
+        return (2 * endpoints - (env.xmax.squeeze() + env.xmin.squeeze())) / (env.xmax.squeeze() - env.xmin.squeeze())
+
+    design_variables = mmc_solution['design_variables']
+    components = np.split(np.array(design_variables), mmc_solution['number_components'])
+
+    if isinstance(env.observation_space, spaces.Dict):
+        expert_observations = {key: [] for key in obs[0].keys()}
+    else:
+        expert_observations = []
+
+    expert_actions = []
+
+    for single_component in components:
+        endpoints = find_endpoints(single_component[0], single_component[1], single_component[2], single_component[5])
+        endpoints = np.append(endpoints, single_component[3])
+        endpoints = np.append(endpoints, single_component[4])
+
+        action = variables_2_actions(endpoints)
+
+        obs, reward, terminated, truncated, info = env.step(action)
+
+        if isinstance(env.observation_space, spaces.Dict):
+            for key, value in obs.items():
+                expert_observations[key].append(value)
+        else:
+            expert_observations.append(obs)
+
+        expert_actions.append(action)
+
+        if terminated and plot_terminated:
+            fig = env.plot(train_viz=False, axis=True)
+
+    if isinstance(env.observation_space, spaces.Dict):
+        for key, value in expert_observations.items():
+            expert_observations[key] = np.array(value)
+    else:
+        expert_observations = np.array(expert_observations)
+
+    expert_actions = np.array(expert_actions)
+
+    return expert_observations, expert_actions
