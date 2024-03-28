@@ -20,6 +20,9 @@ from multiprocessing import Pool, cpu_count
 import pickle
 from gymnasium import spaces
 import matplotlib.pyplot as plt
+import os
+import json
+
 
 # Let's load an expert sample:
 def count_top (filepath):
@@ -64,7 +67,7 @@ def generate_mmc_solutions(key,dataset_folder):
     """
     env = sogym(mode='train',observation_type='dense',vol_constraint_type='soft',seed=key,resolution=50)
     obs = env.reset()
-    xval, f0val, num_iter, H, Phimax, allPhi, den,N, cfg =  run_mmc(env.conditions,env.nelx,env.nely,env.dx,env.dy,plotting='nothing',verbose=1)
+    xval, f0val, num_iter, H, Phimax, allPhi, den,N, cfg =  run_mmc(env.conditions,env.nelx,env.nely,env.dx,env.dy,plotting='nothing',verbose=0)
     #out_conditions = train_env.conditions.copy()
     out_conditions = env.conditions.copy()
 
@@ -329,161 +332,113 @@ def load_all_trajectories(n_workers=4):
     return trajectories
 
 
-# def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False):
-#  # Iterate over each file in the directory
-#     for filename in os.listdir(directory_path):
-#         if filename.endswith(".json"):
-#             file_path = os.path.join(directory_path, filename)
-#     mmc_solution = load_top(file_path)
-#     env = sogym(**env_kwargs) if env_kwargs else sogym()
-#     start_dict ={
-#         'dx': mmc_solution['dx'],
-#         'dy': mmc_solution['dy'],
-#         'nelx': mmc_solution['nelx'],
-#         'nely': mmc_solution['nely'],
-#         'conditions': mmc_solution['boundary_conditions']
-#     }
-#     obs = env.reset(start_dict = start_dict)
-
-#     def find_endpoints(x_center, y_center, L, theta):
-#         x_1 = x_center - L * np.cos(theta)
-#         x_2 = x_center + L * np.cos(theta)
-#         y_1 = y_center - L * np.sin(theta)
-#         y_2 = y_center + L * np.sin(theta)
-
-#         x_max = env.xmax[0]
-#         x_min = env.xmin[0]
-
-#         y_max = env.xmax[1]
-#         y_min = env.xmin[1]
-#         # Clip x and y between min and max
-#         x_1 = np.clip(x_1, x_min, x_max)
-#         x_2 = np.clip(x_2, x_min, x_max)
-#         y_1 = np.clip(y_1, y_min, y_max)
-#         y_2 = np.clip(y_2, y_min, y_max)
-#         return np.array([x_1[0], y_1[0], x_2[0], y_2[0]])
-
-#     def variables_2_actions(endpoints):
-#         return (2 * endpoints - (env.xmax.squeeze() + env.xmin.squeeze())) / (env.xmax.squeeze() - env.xmin.squeeze())
-
-#     design_variables = mmc_solution['design_variables']
-#     components = np.split(np.array(design_variables), mmc_solution['number_components'])
-
-#     if isinstance(env.observation_space, spaces.Dict):
-#         expert_observations = {key: [] for key in obs[0].keys()}
-#     else:
-#         expert_observations = []
-
-#     expert_actions = []
-
-#     for single_component in components:
-#         endpoints = find_endpoints(single_component[0], single_component[1], single_component[2], single_component[5])
-#         endpoints = np.append(endpoints, single_component[3])
-#         endpoints = np.append(endpoints, single_component[4])
-
-#         action = variables_2_actions(endpoints)
-
-#         obs, reward, terminated, truncated, info = env.step(action)
-
-#         if isinstance(env.observation_space, spaces.Dict):
-#             for key, value in obs.items():
-#                 expert_observations[key].append(value)
-#         else:
-#             expert_observations.append(obs)
-
-#         expert_actions.append(action)
-#         if terminated and plot_terminated:
-#             print('test')
-#             fig = env.plot(train_viz=False, axis=True)
-#             fig.savefig('test.png')
-#     if isinstance(env.observation_space, spaces.Dict):
-#         for key, value in expert_observations.items():
-#             expert_observations[key] = np.array(value)
-#     else:
-#         expert_observations = np.array(expert_observations)
-
-#     expert_actions = np.array(expert_actions)
-
-#     return expert_observations, expert_actions
-
-
 import os
-import json
+import multiprocessing
+from functools import partial
+import numpy as np
+from gym import spaces
 
-def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False):
+def find_endpoints(env, x_center, y_center, L, theta):
+    x_1 = x_center - L * np.cos(theta)
+    x_2 = x_center + L * np.cos(theta)
+    y_1 = y_center - L * np.sin(theta)
+    y_2 = y_center + L * np.sin(theta)
+
+    x_max = env.xmax[0]
+    x_min = env.xmin[0]
+
+    y_max = env.xmax[1]
+    y_min = env.xmin[1]
+    # Clip x and y between min and max
+    x_1 = np.clip(x_1, x_min, x_max)
+    x_2 = np.clip(x_2, x_min, x_max)
+    y_1 = np.clip(y_1, y_min, y_max)
+    y_2 = np.clip(y_2, y_min, y_max)
+    return np.array([x_1[0], y_1[0], x_2[0], y_2[0]])
+
+def variables_2_actions(env, endpoints):
+    return (2 * endpoints - (env.xmax.squeeze() + env.xmin.squeeze())) / (env.xmax.squeeze() - env.xmin.squeeze())
+
+def process_file(env_kwargs, plot_terminated, filename, directory_path):
     env = sogym(**env_kwargs) if env_kwargs else sogym()
     obs = env.reset()
-    def find_endpoints(x_center, y_center, L, theta):
-        x_1 = x_center - L * np.cos(theta)
-        x_2 = x_center + L * np.cos(theta)
-        y_1 = y_center - L * np.sin(theta)
-        y_2 = y_center + L * np.sin(theta)
-
-        x_max = env.xmax[0]
-        x_min = env.xmin[0]
-
-        y_max = env.xmax[1]
-        y_min = env.xmin[1]
-        # Clip x and y between min and max
-        x_1 = np.clip(x_1, x_min, x_max)
-        x_2 = np.clip(x_2, x_min, x_max)
-        y_1 = np.clip(y_1, y_min, y_max)
-        y_2 = np.clip(y_2, y_min, y_max)
-        return np.array([x_1[0], y_1[0], x_2[0], y_2[0]])
-
-    def variables_2_actions(endpoints):
-        return (2 * endpoints - (env.xmax.squeeze() + env.xmin.squeeze())) / (env.xmax.squeeze() - env.xmin.squeeze())
 
     if isinstance(env.observation_space, spaces.Dict):
-        expert_observations = {key: [] for key in obs[0].keys()}
+        expert_observations = {key: [] for key in obs.keys()}
     else:
         expert_observations = []
 
     expert_actions = []
 
-    # Iterate over each file in the directory
-    for filename in os.listdir(directory_path):
-        if filename.endswith(".json"):
-            file_path = os.path.join(directory_path, filename)
-            mmc_solution = load_top(file_path)
-            start_dict ={
-                'dx': mmc_solution['dx'],
-                'dy': mmc_solution['dy'],
-                'nelx': mmc_solution['nelx'],
-                'nely': mmc_solution['nely'],
-                'conditions': mmc_solution['boundary_conditions']
-            }
-            obs = env.reset(start_dict = start_dict)
+    file_path = os.path.join(directory_path, filename)
+    mmc_solution = load_top(file_path)
+    start_dict = {
+        'dx': mmc_solution['dx'],
+        'dy': mmc_solution['dy'],
+        'nelx': mmc_solution['nelx'],
+        'nely': mmc_solution['nely'],
+        'conditions': mmc_solution['boundary_conditions']
+    }
+    obs = env.reset(start_dict=start_dict)
 
-            design_variables = mmc_solution['design_variables']
-            components = np.split(np.array(design_variables), mmc_solution['number_components'])
+    design_variables = mmc_solution['design_variables']
+    components = np.split(np.array(design_variables), mmc_solution['number_components'])
 
-            for single_component in components:
-                endpoints = find_endpoints(single_component[0], single_component[1], single_component[2], single_component[5])
-                endpoints = np.append(endpoints, single_component[3])
-                endpoints = np.append(endpoints, single_component[4])
+    for single_component in components:
+        endpoints = find_endpoints(env, single_component[0], single_component[1], single_component[2], single_component[5])
+        endpoints = np.append(endpoints, single_component[3])
+        endpoints = np.append(endpoints, single_component[4])
 
-                action = variables_2_actions(endpoints)
+        action = variables_2_actions(env, endpoints)
 
-                obs, reward, terminated, truncated, info = env.step(action)
+        obs, reward, terminated, truncated, info = env.step(action)
 
-                if isinstance(env.observation_space, spaces.Dict):
-                    for key, value in obs.items():
-                        expert_observations[key].append(value)
-                else:
-                    expert_observations.append(obs)
+        if isinstance(env.observation_space, spaces.Dict):
+            for key, value in obs.items():
+                expert_observations[key].append(value)
+        else:
+            expert_observations.append(obs)
 
-                expert_actions.append(action)
+        expert_actions.append(action)
 
-                if terminated and plot_terminated:
-                    fig = env.plot(train_viz=False, axis=True)
+        if terminated and plot_terminated:
+            fig = env.plot(train_viz=False, axis=True)
 
     if isinstance(env.observation_space, spaces.Dict):
-        for key, value in expert_observations.items():
-            expert_observations[key] = np.array(value)
+        expert_observations = {key: np.array(value) for key, value in expert_observations.items()}
     else:
         expert_observations = np.array(expert_observations)
 
     expert_actions = np.array(expert_actions)
+
+    return expert_observations, expert_actions
+
+def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False, num_processes=None):
+    if num_processes is None:
+        num_processes = multiprocessing.cpu_count()
+
+    pool = multiprocessing.Pool(processes=num_processes)
+
+    file_list = [os.path.join(directory_path, filename) for filename in os.listdir(directory_path) if filename.endswith(".json")]
+
+    process_file_partial = partial(process_file, env_kwargs, plot_terminated, directory_path=directory_path)
+
+    results = []
+    with tqdm(total=len(file_list), desc="Processing files", unit="file") as pbar:
+        for result in pool.imap_unordered(process_file_partial, file_list):
+            results.append(result)
+            pbar.update(1)
+
+    pool.close()
+    pool.join()
+
+    expert_observations_list, expert_actions_list = zip(*results)
+
+    if isinstance(sogym().observation_space, spaces.Dict):
+        expert_observations = {key: np.concatenate([obs[key] for obs in expert_observations_list]) for key in expert_observations_list[0].keys()}
+    else:
+        expert_observations = np.concatenate(expert_observations_list)
+
+    expert_actions = np.concatenate(expert_actions_list)
 
     return expert_observations, expert_actions

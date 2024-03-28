@@ -30,7 +30,7 @@ class sogym(gym.Env):
         self.counter=0  
         self.resolution = resolution
         self.fig = plt.figure(dpi=100)
-        self.image_resolution = 64
+        self.image_resolution = 128
         self.reward = 0.0
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
@@ -40,7 +40,6 @@ class sogym(gym.Env):
             img_shape = (3,self.image_resolution,self.image_resolution)
         elif self.img_format == 'HWC':
             img_shape = (self.image_resolution,self.image_resolution,3)
-        print("Using:",observation_type,"observation space")
         if self.observation_type =='dense':
             self.observation_space = spaces.Dict(
                                         {
@@ -428,7 +427,7 @@ class sogym(gym.Env):
         plt.close(self.fig)
 
         # Resize the image to the desired resolution using OpenCV
-        res = cv2.resize(buf, dsize=(resolution[0], resolution[1]), interpolation=cv2.INTER_NEAREST)
+        res = cv2.resize(buf, dsize=(resolution[0], resolution[1]), interpolation=cv2.INTER_CUBIC)
         # Convert res to channel first if needed
         if self.img_format == 'CHW':
             res = np.moveaxis(res, -1, 0)
