@@ -359,16 +359,9 @@ def find_endpoints(env, x_center, y_center, L, theta):
 def variables_2_actions(env, endpoints):
     return (2 * endpoints - (env.xmax.squeeze() + env.xmin.squeeze())) / (env.xmax.squeeze() - env.xmin.squeeze())
 
-def process_file(env_kwargs, plot_terminated, filename, directory_path):
+def process_file(env_kwargs, plot_terminated, filename, directory_path, num_permutations):
     env = sogym(**env_kwargs) if env_kwargs else sogym()
     obs = env.reset()
-
-    if isinstance(env.observation_space, spaces.Dict):
-        expert_observations = {key: [] for key in obs.keys()}
-    else:
-        expert_observations = []
-
-    expert_actions = []
 
     file_path = os.path.join(directory_path, filename)
     mmc_solution = load_top(file_path)
@@ -379,41 +372,68 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path):
         'nely': mmc_solution['nely'],
         'conditions': mmc_solution['boundary_conditions']
     }
-    obs = env.reset(start_dict=start_dict)
 
     design_variables = mmc_solution['design_variables']
     components = np.split(np.array(design_variables), mmc_solution['number_components'])
 
-    for single_component in components:
-        endpoints = find_endpoints(env, single_component[0], single_component[1], single_component[2], single_component[5])
-        endpoints = np.append(endpoints, single_component[3])
-        endpoints = np.append(endpoints, single_component[4])
+    expert_observations_list = []
+    expert_actions_list = []
 
-        action = variables_2_actions(env, endpoints)
-
-        obs, reward, terminated, truncated, info = env.step(action)
+    for _ in range(num_permutations):
+        np.random.shuffle(components)
+        obs = env.reset(start_dict=start_dict)
 
         if isinstance(env.observation_space, spaces.Dict):
-            for key, value in obs.items():
-                expert_observations[key].append(value)
+            expert_observations = {key: [] for key in obs.keys()}
         else:
-            expert_observations.append(obs)
+            expert_observations = []
 
-        expert_actions.append(action)
+        expert_actions = []
 
-        if terminated and plot_terminated:
-            fig = env.plot(train_viz=False, axis=True)
+        for single_component in components:
+            endpoints = find_endpoints(env, single_component[0], single_component[1], single_component[2], single_component[5])
+            endpoints = np.append(endpoints, single_component[3])
+            endpoints = np.append(endpoints, single_component[4])
+
+            action = variables_2_actions(env, endpoints)
+
+            obs, reward, terminated, truncated, info = env.step(action)
+
+            if isinstance(env.observation_space, spaces.Dict):
+                for key, value in obs.items():
+                    expert_observations[key].append(value)
+            else:
+                expert_observations.append(obs)
+
+            expert_actions.append(action)
+
+            if terminated and plot_terminated:
+                fig = env.plot(train_viz=False, axis=True)
+
+        if isinstance(env.observation_space, spaces.Dict):
+            expert_observations = {key: np.array(value) for key, value in expert_observations.items()}
+        else:
+            expert_observations = np.array(expert_observations)
+
+        expert_actions = np.array(expert_actions)
+
+        expert_observations_list.append(expert_observations)
+        expert_actions_list.append(expert_actions)
 
     if isinstance(env.observation_space, spaces.Dict):
-        expert_observations = {key: np.array(value) for key, value in expert_observations.items()}
+        expert_observations_list = {key: np.concatenate([obs[key] for obs in expert_observations_list]) for key in expert_observations_list[0].keys()}
     else:
-        expert_observations = np.array(expert_observations)
+        expert_observations_list = np.concatenate(expert_observations_list)
 
-    expert_actions = np.array(expert_actions)
+    expert_actions_list = np.concatenate(expert_actions_list)
 
-    return expert_observations, expert_actions
+    return expert_observations_list, expert_actions_list
 
-def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False, num_processes=None):
+
+
+
+
+def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False, num_processes=None, num_permutations=1):
     if num_processes is None:
         num_processes = multiprocessing.cpu_count()
 
@@ -421,7 +441,7 @@ def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=Fal
 
     file_list = [os.path.join(directory_path, filename) for filename in os.listdir(directory_path) if filename.endswith(".json")]
 
-    process_file_partial = partial(process_file, env_kwargs, plot_terminated, directory_path=directory_path)
+    process_file_partial = partial(process_file, env_kwargs, plot_terminated, directory_path=directory_path, num_permutations=num_permutations)
 
     results = []
     with tqdm(total=len(file_list), desc="Processing files", unit="file") as pbar:
@@ -442,3 +462,4 @@ def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=Fal
     expert_actions = np.concatenate(expert_actions_list)
 
     return expert_observations, expert_actions
+
