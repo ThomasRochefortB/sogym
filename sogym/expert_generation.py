@@ -20,9 +20,7 @@ from multiprocessing import Pool, cpu_count
 import pickle
 from gymnasium import spaces
 import matplotlib.pyplot as plt
-import os
-import json
-
+from functools import partial
 
 # Let's load an expert sample:
 def count_top (filepath):
@@ -331,13 +329,6 @@ def load_all_trajectories(n_workers=4):
     
     return trajectories
 
-
-import os
-import multiprocessing
-from functools import partial
-import numpy as np
-from gym import spaces
-
 def find_endpoints(env, x_center, y_center, L, theta):
     x_1 = x_center - L * np.cos(theta)
     x_2 = x_center + L * np.cos(theta)
@@ -435,9 +426,9 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
 
 def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False, num_processes=None, num_permutations=1):
     if num_processes is None:
-        num_processes = multiprocessing.cpu_count()
+        num_processes = mp.cpu_count()
 
-    pool = multiprocessing.Pool(processes=num_processes)
+    pool = mp.Pool(processes=num_processes)
 
     file_list = [os.path.join(directory_path, filename) for filename in os.listdir(directory_path) if filename.endswith(".json")]
 
