@@ -9,7 +9,6 @@ import codecs
 import multiprocessing as mp
 import glob
 from sogym.struct import build_design
-
 from imitation.data.types import Trajectory
 from itertools import permutations
 import random
