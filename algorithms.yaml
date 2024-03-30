@@ -1,6 +1,12 @@
 common:
   tb_log: &tb_log "./tb_logs"
   net_arch: &net_arch     # Same 2 layers of 256 for critic and actor indepent of off-policy or on-policy
+    - 2048
+    - 2048
+    - 1024
+    - 1024
+    - 512
+    - 512
     - 256
     - 256
 

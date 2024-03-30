@@ -6,6 +6,11 @@ from torch.optim.lr_scheduler import StepLR
 import gymnasium as gym
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
+from comet_ml import Experiment
+import matplotlib.pyplot as plt
+from stable_baselines3 import PPO, A2C, SAC, TD3
+from stable_baselines3.common.evaluation import evaluate_policy
+import torch
 
 class ExpertDataSet(Dataset):
     def __init__(self, expert_observations, expert_actions, env):
@@ -13,7 +18,7 @@ class ExpertDataSet(Dataset):
             # Handle Dict observation space
             self.observations = {}
             for key in env.observation_space.spaces.keys():
-                self.observations[key] = th.from_numpy(np.stack([obs[key] for obs in expert_observations]))
+                self.observations[key] = th.from_numpy(expert_observations[key])
         else:
             # Handle Box observation space
             self.observations = th.from_numpy(expert_observations)
@@ -36,11 +41,13 @@ class ExpertDataSet(Dataset):
         return len(self.actions)
 
 
+
 def pretrain_agent(
     student,
     expert_observations,
     expert_actions,
     env,
+    test_env,
     batch_size=64,
     epochs=1000,
     scheduler_gamma=0.7,
@@ -53,6 +60,16 @@ def pretrain_agent(
     plot_curves=True,
     tensorboard_log_dir="pretraining_bc",
     verbose=True,  # Added verbose option
+    save_path=None,  # Added save path argument
+    comet_ml_api_key=None,  # Added Comet ML API key argument
+    comet_ml_project_name=None,  # Added Comet ML project name argument
+    comet_ml_experiment_name=None,  # Added Comet ML experiment name argument
+    n_eval_episodes=10,  # Added number of evaluation episodes argument
+    eval_freq=10,  # Added policy evaluation frequency parameter
+    l2_reg_strength=0.0,
+
+
+
 ):
     use_cuda = not no_cuda and th.cuda.is_available()
     th.manual_seed(seed)
@@ -101,6 +118,13 @@ def pretrain_agent(
                 target = target.long()
 
             loss = criterion(action_prediction, target)
+            # Calculate L2 regularization loss
+            l2_reg_loss = 0.0
+            for param in model.parameters():
+                l2_reg_loss += torch.norm(param, 2)
+
+            # Add L2 regularization loss to the total loss
+            loss += l2_reg_strength * l2_reg_loss
             train_loss += loss.item()
             loss.backward()
 
@@ -137,6 +161,9 @@ def pretrain_agent(
         # Log training loss and gradient norm to TensorBoard
         writer.add_scalar("Loss/train", train_loss, epoch)
         writer.add_scalar("Grad Norm", grad_norm, epoch)
+        if experiment is not None:
+            experiment.log_metric("train_loss", train_loss, step=epoch)
+            experiment.log_metric("grad_norm", grad_norm, step=epoch)
 
         return train_loss
 
@@ -176,6 +203,9 @@ def pretrain_agent(
 
         # Log test loss to TensorBoard
         writer.add_scalar("Loss/test", test_loss, epoch)
+        # Log test loss to Comet ML
+        if experiment is not None:
+            experiment.log_metric("test_loss", test_loss, step=epoch)
 
         return test_loss
 
@@ -197,7 +227,7 @@ def pretrain_agent(
         **kwargs,
     )
 
-    optimizer = optim.Adadelta(model.parameters(), lr=learning_rate)
+    optimizer = optim.Adadelta(model.parameters(), lr=learning_rate,weight_decay=l2_reg_strength)
     scheduler = StepLR(optimizer, step_size=1, gamma=scheduler_gamma)
 
     train_losses = []
@@ -214,6 +244,13 @@ def pretrain_agent(
         train_line, = ax.plot([], [], label='Train Loss')
         test_line, = ax.plot([], [], label='Test Loss')
         ax.legend()
+
+    if comet_ml_api_key is not None:
+        experiment = Experiment(api_key=comet_ml_api_key, project_name=comet_ml_project_name)
+        if comet_ml_experiment_name is not None:
+            experiment.set_name(comet_ml_experiment_name)
+    else:
+        experiment = None
 
     for epoch in range(1, epochs + 1):
         train_loss = train(model, device, train_loader, optimizer, epoch, max_grad_norm=10.0)
@@ -235,8 +272,23 @@ def pretrain_agent(
         if test_loss < best_test_loss:
             best_test_loss = test_loss
             no_improvement_count = 0
+            # Save the best model if save_path is provided
+            if save_path is not None:
+                student.save(save_path)
+                if verbose:
+                    print(f"Saved best model to {save_path}")
         else:
             no_improvement_count += 1
+
+        if epoch % eval_freq == 0:
+            # Evaluate the student policy on the test environment
+            mean_reward, std_reward = evaluate_policy(student, test_env, n_eval_episodes=n_eval_episodes)
+            if verbose:
+                print(f"Epoch {epoch}: Mean reward = {mean_reward:.2f} +/- {std_reward:.2f}")
+            # Log the evaluation metrics to Comet ML
+            if experiment is not None:
+                experiment.log_metric("mean_reward", mean_reward, step=epoch)
+                experiment.log_metric("std_reward", std_reward, step=epoch)
 
         if no_improvement_count >= early_stopping_patience:
             if verbose:
@@ -247,5 +299,7 @@ def pretrain_agent(
 
     student.policy = model
 
-    # Close the SummaryWriter
+    # Close the SummaryWriter and Comet ML experiment
     writer.close()
+    if experiment is not None:
+        experiment.end()

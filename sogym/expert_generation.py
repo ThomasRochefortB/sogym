@@ -369,12 +369,16 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
     expert_observations_list = []
     expert_actions_list = []
 
-    for _ in range(num_permutations):
+    if num_permutations is None:
+        num_permutations = 1
+    else:
         np.random.shuffle(components)
+
+    for _ in range(num_permutations):
         obs = env.reset(start_dict=start_dict)
 
         if isinstance(env.observation_space, spaces.Dict):
-            expert_observations = {key: [] for key in obs.keys()}
+            expert_observations = {key: [] for key in obs[0].keys()}
         else:
             expert_observations = []
 
@@ -418,6 +422,7 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
     expert_actions_list = np.concatenate(expert_actions_list)
 
     return expert_observations_list, expert_actions_list
+
 
 
 
