@@ -253,7 +253,7 @@ def pretrain_agent(
         experiment = None
 
     for epoch in range(1, epochs + 1):
-        train_loss = train(model, device, train_loader, optimizer, epoch, max_grad_norm=10.0)
+        train_loss = train(model, device, train_loader, optimizer, epoch, max_grad_norm=1.0)
         test_loss = test(model, device, test_loader)
 
         train_losses.append(train_loss)

@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=18,resolution = 100, observation_type = 'dense',
+    def __init__(self,N_components=8,resolution = 100, observation_type = 'dense',
                  mode = 'train',img_format='CHW',check_connectivity = False, 
                  seed=None,vol_constraint_type='hard',model=None,tokenizer=None):
      

@@ -47,7 +47,7 @@ def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilo
         operation = np.multiply(np.matlib.repmat(dpdx1,1,nEhcp),dx1.T) + np.multiply(np.matlib.repmat(dpdy1,1,nEhcp),dy1.T) + dpdL + np.multiply(np.matlib.repmat(dpdl,1,nEhcp),dl)
         allPhidrv[:,np.arange((i)*nEhcp,(i+1)*nEhcp)] = operation
     else:                 # deleting tiny componennp.spacing(1)t and removing it from active sets
-        print(['The {}-th component is too small! DELETE it!!!'.format(i)])   
+        #print(['The {}-th component is too small! DELETE it!!!'.format(i)])   
         allPhi[:,i] = -1e3
         xval[(i)*nEhcp+3] = 0
         xval[(i)*nEhcp+4] = 0
@@ -59,9 +59,9 @@ def calc_Phi(allPhi,allPhidrv,xval,i,LSgrid,p,nEhcp,actComp,actDsvb,minSz,epsilo
 def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0,cfg=None):   ## Probably need to add xmin and xmax
     if cfg is None:
         cfg = {
-            'optimizer':'hybrid', #optimiser choice
-            'xInt':0.165, #initial interval of components in x
-            'yInt':0.165, #initial interval of components in y
+            'optimizer':'mma', #optimiser choice
+            'xInt':0.25, #initial interval of components in x
+            'yInt':0.25, #initial interval of components in y
             'E':1.0, #Young's modulus
             'nu':0.3, #Poisson ratio
             'h':1, #thickness
@@ -69,7 +69,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0,cfg=None):   
             'scl':1, #scale factor for obj
             'p':6,  #power of super ellipsoid
             'lmd':100, #power of KS aggregation   
-            'maxiter':500, # maximum number of outer iterations
+            'maxiter':300, # maximum number of outer iterations
             'alpha':1e-9, # This is the threshold level in the Heaviside function
             'epsilon':0.2, #This is the regularization term in the Heaviside function
             'maxinnerinit':1, # This is the maximum number of inner iterations for GCMMA
@@ -184,7 +184,8 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0,cfg=None):   
         temp = np.exp(lmd*allPhiAct)
         # temp = np.where(temp==0,1e-08,temp)
 
-        Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        # global TDF using K-S aggregation
+        Phimax = np.maximum(-1e3,np.log(np.sum(temp,1) + np.spacing(1))/lmd)
+
         allPhiDrvAct = allPhiDrv[:,actDsvb]
 
         Phimaxdphi = np.kron(np.divide(temp[:,0:len(actComp)],(np.sum(temp,1)+np.spacing(1)).reshape((len(temp),1),order='F')),np.ones((1,nEhcp)))
@@ -215,7 +216,8 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0,cfg=None):   
         temp = np.exp(lmd*allPhiAct)
         # temp = np.where(temp==0,1e-08,temp)
 
-        Phimax = np.maximum(-1e3,np.log(np.sum(temp,1))/lmd)                        # global TDF using K-S aggregation
+        Phimax = np.maximum(-1e3,np.log(np.sum(temp,1) + np.spacing(1))/lmd)
+
         allPhiDrvAct = allPhiDrv[:,actDsvb]
 
         Phimaxdphi = np.kron(np.divide(temp[:,0:len(actComp)],(np.sum(temp,1)+np.spacing(1)).reshape((len(temp),1),order='F')),np.ones((1,nEhcp)))
@@ -282,10 +284,10 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0,cfg=None):   
 
     while objVr5>stop_threshold and loop<=maxiter:
         outeriter += 1
-        criteria=((f0val_2-f0val_1)/((abs(f0val_2)+abs(f0val_1))/2))*((f0val_1-f0val)/(abs(f0val_1)+abs(f0val))/2)
+        if cfg['optimizer']=='hybrid':
+            criteria=((f0val_2-f0val_1)/((abs(f0val_2)+abs(f0val_1))/2))*((f0val_1-f0val)/(abs(f0val_1)+abs(f0val))/2)
         if criteria>switch and criteria<0:
             optimizer='GCMMA'  
-
         if optimizer=='MMA':
             xmma,_,_,_,_,_,_,_,_,low,upp = mmasub(m,nDsvb,loop,xval.reshape((xval.shape[0],1),order='F'),xmin,xmax,xold1,xold2,f0val,df0dx,fval,dfdx,low,upp,a0,a,c,d,move=1.0)
 
