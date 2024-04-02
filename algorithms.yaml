@@ -22,7 +22,8 @@ PPO:
 SAC:
   verbose: 0
   learning_starts: 4096
-  batch_size: 8192
+  batch_size: 64
+  buffer_size : 100000
   train_freq: 8
   gradient_steps: 1
   tensorboard_log: *tb_log

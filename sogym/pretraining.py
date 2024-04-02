@@ -68,8 +68,6 @@ def pretrain_agent(
     eval_freq=10,  # Added policy evaluation frequency parameter
     l2_reg_strength=0.0,
 
-
-
 ):
     use_cuda = not no_cuda and th.cuda.is_available()
     th.manual_seed(seed)
