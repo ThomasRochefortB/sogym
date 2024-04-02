@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 from stable_baselines3 import PPO, A2C, SAC, TD3
 from stable_baselines3.common.evaluation import evaluate_policy
 import torch
+torch.autograd.set_detect_anomaly(True)
+
 
 class ExpertDataSet(Dataset):
     def __init__(self, expert_observations, expert_actions, env):
@@ -143,14 +145,16 @@ def pretrain_agent(
                 print(
                     "Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tGrad Norm: {:.6f}\tLR: {:.6f}".format(
                         epoch,
-                        batch_idx * len(data),
+                        (batch_idx + 1) * train_loader.batch_size,
                         len(train_loader.dataset),
-                        100.0 * batch_idx / len(train_loader),
+                        100.0 * (batch_idx + 1) / len(train_loader),
                         loss.item(),
                         grad_norm,
                         current_lr,
                     )
                 )
+
+
 
         train_loss /= num_batches
         if verbose:

@@ -366,8 +366,7 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
     design_variables = mmc_solution['design_variables']
     components = np.split(np.array(design_variables), mmc_solution['number_components'])
 
-    expert_observations_list = []
-    expert_actions_list = []
+    results = []
 
     if num_permutations is None:
         num_permutations = 1
@@ -411,43 +410,32 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
 
         expert_actions = np.array(expert_actions)
 
-        expert_observations_list.append(expert_observations)
-        expert_actions_list.append(expert_actions)
+        results.append((expert_observations, expert_actions))
 
-    if isinstance(env.observation_space, spaces.Dict):
-        expert_observations_list = {key: np.concatenate([obs[key] for obs in expert_observations_list]) for key in expert_observations_list[0].keys()}
-    else:
-        expert_observations_list = np.concatenate(expert_observations_list)
-
-    expert_actions_list = np.concatenate(expert_actions_list)
-
-    return expert_observations_list, expert_actions_list
-
-
-
-
+    return results
 
 
 def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False, num_processes=None, num_permutations=1):
     if num_processes is None:
         num_processes = mp.cpu_count()
-
-    pool = mp.Pool(processes=num_processes)
+    pool = mp.Pool(processes=num_processes, maxtasksperchild=10)
 
     file_list = [os.path.join(directory_path, filename) for filename in os.listdir(directory_path) if filename.endswith(".json")]
 
     process_file_partial = partial(process_file, env_kwargs, plot_terminated, directory_path=directory_path, num_permutations=num_permutations)
 
-    results = []
+    expert_observations_list = []
+    expert_actions_list = []
+
     with tqdm(total=len(file_list), desc="Processing files", unit="file") as pbar:
         for result in pool.imap_unordered(process_file_partial, file_list):
-            results.append(result)
+            for expert_observations, expert_actions in result:
+                expert_observations_list.append(expert_observations)
+                expert_actions_list.append(expert_actions)
             pbar.update(1)
 
     pool.close()
     pool.join()
-
-    expert_observations_list, expert_actions_list = zip(*results)
 
     if isinstance(sogym().observation_space, spaces.Dict):
         expert_observations = {key: np.concatenate([obs[key] for obs in expert_observations_list]) for key in expert_observations_list[0].keys()}
@@ -457,4 +445,3 @@ def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=Fal
     expert_actions = np.concatenate(expert_actions_list)
 
     return expert_observations, expert_actions
-

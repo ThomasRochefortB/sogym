@@ -30,7 +30,7 @@ class sogym(gym.Env):
         self.counter=0  
         self.resolution = resolution
         self.fig = plt.figure(dpi=100)
-        self.image_resolution = 128
+        self.image_resolution = 64
         self.reward = 0.0
         # series of render color for the plot function
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
