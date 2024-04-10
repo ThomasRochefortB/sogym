@@ -67,7 +67,7 @@ def calculate_compliance(H,conditions,DW=2.0,DH=1.0,nelx=100,nely=50):
     fixDof=conditions['fixeddofs']
     loaddof_x=conditions['loaddof_x']
     loaddof_y=conditions['loaddof_y']
-    magnitude_x=conditions['magnitude_x']  
+    magnitude_x=conditions['magnitude_x'] 
     magnitude_y=conditions['magnitude_y']
     
     ## Setting of FE discretization

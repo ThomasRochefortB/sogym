@@ -11,6 +11,7 @@ import math
 # import matplotlib
 # matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from PIL import Image, ImageDraw
 
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
@@ -54,18 +55,19 @@ class sogym(gym.Env):
             self.observation_space = spaces.Box(low=-np.pi, high=np.pi, shape=(27+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
             
 
-        elif self.observation_type =='image':
+        elif self.observation_type == 'image':
             self.observation_space = spaces.Dict(
-                                        {
-                                            "image": spaces.Box(0, 255, img_shape,dtype=np.uint8), # Image of the current design
-                                            "beta": spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
-                                            "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
-                                            "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
-                                            "von_mises_stress":spaces.Box(0,255,img_shape,dtype=np.uint8) ,
-                                            "score": spaces.Box(-np.inf,np.inf,(1,),dtype=np.float32)
-                                            }
-                                        )   
+                {
+                    "image": spaces.Box(0, 255, img_shape, dtype=np.uint8),  # Image of the current design
+                    "beta": spaces.Box(-1, 2.0, (27,), dtype=np.float32),  # Description vector \beta containing (TO DO)
+                    "n_steps_left": spaces.Box(0.0, 1.0, (1,), dtype=np.float32),
+                    "design_variables": spaces.Box(-1.0, 1.0, (self.N_components * self.N_actions,), dtype=np.float32),
+                    "volume": spaces.Box(0, 1, (1,), dtype=np.float32),  # Current volume at the current step
+                    "structure_strain_energy": spaces.Box(0, 255, img_shape, dtype=np.uint8),
+                    "score": spaces.Box(-np.inf, np.inf, (1,), dtype=np.float32)
+                }
+            )
+
         elif self.observation_type =='text_dict':
             self.tokenizer = tokenizer
             self.model = model
@@ -163,18 +165,19 @@ class sogym(gym.Env):
 
         elif self.observation_type == 'image':
             if self.img_format == 'CHW':
-                empty_von_mises_stress = np.zeros((3, self.image_resolution, self.image_resolution), dtype=np.uint8)
+                empty_structure_strain_energy = np.zeros((3, self.image_resolution, self.image_resolution), dtype=np.uint8)
             elif self.img_format == 'HWC':
-                empty_von_mises_stress = np.zeros((self.image_resolution, self.image_resolution, 3), dtype=np.uint8)
+                empty_structure_strain_energy = np.zeros((self.image_resolution, self.image_resolution, 3), dtype=np.uint8)
 
             self.observation = {"image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
                                 "beta": np.float32(self.beta),
                                 "design_variables": np.float32(self.variables.flatten()),
                                 "volume": np.array([0.0], dtype=np.float32),
                                 "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
-                                "von_mises_stress": empty_von_mises_stress,
+                                "structure_strain_energy": empty_structure_strain_energy,
                                 "score": np.array([0.0], dtype=np.float32)
                                 }
+
             
         elif self.observation_type == 'text_dict':
             self.observation = {
@@ -222,17 +225,18 @@ class sogym(gym.Env):
         self.volume = sum(self.den) * self.EW * self.EH / (self.dx * self.dy)
 
         truncated = False
+        is_connected = self.check_connec() if self.check_connectivity else True
 
         if self.action_count < self.N_components:
             # Not at the end of the episode
             self.reward = 0.0
             terminated = False
-            self.calculate_compliance_and_stress()
+            self.calculate_compliance_and_stress(is_connected)
         else:
             # At the end of the episode
             terminated = True
             self.save_last_state()
-            self.calculate_compliance_and_stress()
+            self.calculate_compliance_and_stress(is_connected)
 
             # Check connectivity if required
             is_connected = self.check_connec() if self.check_connectivity else True
@@ -240,31 +244,34 @@ class sogym(gym.Env):
             self.reward = self.calculate_reward(is_connected)
 
         info = {}
-        self.update_observation()
+        self.update_observation(is_connected)
         self.saved_volume.append(self.volume)
 
         return self.observation, self.reward, terminated, truncated, info
 
-    def calculate_compliance_and_stress(self):
+    def calculate_compliance_and_stress(self, is_connected):
         self.compliance, self.volume, self.U, self.F = calculate_compliance(
             self.H, self.conditions, self.dx, self.dy, self.nelx, self.nely)
 
-        nDof = self.U.shape[0]
-        nNod = nDof // 2
+        if is_connected:
+            nDof = self.U.shape[0]
+            nNod = nDof // 2
 
-        mask_x = np.arange(nDof) % 2 == 0
-        mask_y = np.arange(nDof) % 2 == 1
+            mask_x = np.arange(nDof) % 2 == 0
+            mask_y = np.arange(nDof) % 2 == 1
 
-        x_dofs = self.U[mask_x]
-        y_dofs = self.U[mask_y]
+            x_dofs = self.U[mask_x]
+            y_dofs = self.U[mask_y]
 
-        x_displacement = x_dofs.reshape((self.nely + 1, self.nelx + 1), order='F')
-        y_displacement = y_dofs.reshape((self.nely + 1, self.nelx + 1), order='F')
+            x_displacement = x_dofs.reshape((self.nely + 1, self.nelx + 1), order='F')
+            y_displacement = y_dofs.reshape((self.nely + 1, self.nelx + 1), order='F')
 
-        strain_xx, strain_yy, strain_xy = calculate_strains(x_displacement, y_displacement)
-        stress_xx, stress_yy, stress_xy = calculate_stresses(strain_xx, strain_yy, strain_xy)
+            strain_xx, strain_yy, strain_xy = calculate_strains(x_displacement, y_displacement)
+            stress_xx, stress_yy, stress_xy = calculate_stresses(strain_xx, strain_yy, strain_xy)
 
-        self.von_mises_stress = np.sqrt(stress_xx**2 - stress_xx * stress_yy + stress_yy**2 + 3 * stress_xy**2)
+            self.strain_energy = 0.5 * (stress_xx * strain_xx + stress_yy * strain_yy + 2 * stress_xy * strain_xy)
+        else:
+            self.strain_energy = None
 
     def save_last_state(self):
         self.last_Phi = self.Phi
@@ -290,7 +297,7 @@ class sogym(gym.Env):
 
         return reward
 
-    def update_observation(self):
+    def update_observation(self,is_connected):
         if self.observation_type == 'dense':
             self.observation = {
                 "beta": np.float32(self.beta),
@@ -306,16 +313,18 @@ class sogym(gym.Env):
                 np.float32(self.variables.flatten()) / np.pi),
                 axis=0)
         elif self.observation_type == 'image':
-            von_mises_stress_image = self.process_von_mises_stress()
+            structure_strain_energy_image = self.process_structure_strain_energy(is_connected)
+
             self.observation = {
                 "image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
                 "beta": np.float32(self.beta),
                 "design_variables": np.float32(self.variables.flatten()) / np.pi,
                 "volume": np.array([self.volume], dtype=np.float32),
                 "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
-                "von_mises_stress": von_mises_stress_image,
-                "score":np.array([1/ np.log(self.compliance / len(self.conditions['loaddof_x']))],dtype=np.float32)
+                "structure_strain_energy": structure_strain_energy_image,
+                "score": np.array([1 / np.log(self.compliance / len(self.conditions['loaddof_x']))], dtype=np.float32)
             }
+
         elif self.observation_type == 'text_dict':
             self.observation = {
                 "prompt": np.float32(self.model_output),
@@ -326,25 +335,57 @@ class sogym(gym.Env):
         else:
             raise ValueError('Invalid observation space type. Only "dense", "box_dense", "text_dict", and "image" are supported.')
 
-    def process_von_mises_stress(self):
-        von_mises_stress_masked = np.ma.masked_where(self.H.reshape((self.nely + 1, self.nelx + 1), order='F') == 0, self.von_mises_stress)
-        von_mises_stress_normalized = (von_mises_stress_masked - von_mises_stress_masked.min()) / (von_mises_stress_masked.max() - von_mises_stress_masked.min() + 1e-8)
-        von_mises_stress_normalized = (von_mises_stress_normalized * 255).astype(np.uint8)
-        von_mises_stress_normalized = np.ma.filled(von_mises_stress_normalized, 255)
-        von_mises_stress_resized = cv2.resize(von_mises_stress_normalized, dsize=(self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
+    def process_structure_strain_energy(self, is_connected):
+        # Create a grayscale image of the structure
+        structure_image = np.where(self.H.reshape((self.nely + 1, self.nelx + 1), order='F') > 0.1, 128, 255).astype(np.uint8)
 
+        if is_connected:
+            # Normalize the strain energy values
+            strain_energy_normalized = self.strain_energy.copy()
+            strain_energy_normalized[self.H.reshape((self.nely + 1, self.nelx + 1), order='F') < 0.1] = 0
+
+            # Apply logarithmic scaling to the strain energy values
+            strain_energy_log = np.log10(strain_energy_normalized + 1e-8)
+
+            # Normalize the logarithmic strain energy values to a [0, 1] range
+            strain_energy_log_min = strain_energy_log.min()
+            strain_energy_log_max = strain_energy_log.max()
+            strain_energy_log_normalized = (strain_energy_log - strain_energy_log_min) / (strain_energy_log_max - strain_energy_log_min + 1e-8)
+
+            # Apply the jet colormap to the normalized logarithmic strain energy values
+            strain_energy_jet = plt.cm.jet(strain_energy_log_normalized)[:, :, :3]  # Remove the alpha channel
+            strain_energy_jet = (strain_energy_jet * 255).astype(np.uint8)
+
+            # Use self.H to display white outside of the structure
+            strain_energy_jet[self.H.reshape((self.nely + 1, self.nelx + 1), order='F') < 0.1] = 255
+
+            # Resize the structure image to match the size of strain_energy_jet
+            structure_image_resized = cv2.resize(structure_image, (strain_energy_jet.shape[1], strain_energy_jet.shape[0]), interpolation=cv2.INTER_CUBIC)
+
+            # Expand the dimensions of structure_image_resized to match the number of channels in strain_energy_jet
+            structure_image_resized = np.expand_dims(structure_image_resized, axis=-1)
+            structure_image_resized = np.repeat(structure_image_resized, 3, axis=-1)
+
+            # Overlay the strain energy on the structure image
+            structure_strain_energy = cv2.addWeighted(structure_image_resized, 0.3, strain_energy_jet, 0.7, 0)
+        else:
+            structure_strain_energy = cv2.cvtColor(structure_image, cv2.COLOR_GRAY2RGB)
+
+        # Resize the image to the desired resolution
+        structure_strain_energy_resized = cv2.resize(structure_strain_energy, (self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
+
+        # Flip the image horizontally
+        structure_strain_energy_image = structure_strain_energy_resized
         if self.img_format == 'CHW':
-            von_mises_stress_image = np.expand_dims(von_mises_stress_resized, axis=0)
-            von_mises_stress_image = np.repeat(von_mises_stress_image, 3, axis=0)
-        elif self.img_format == 'HWC':
-            von_mises_stress_image = np.expand_dims(von_mises_stress_resized, axis=-1)
-            von_mises_stress_image = np.repeat(von_mises_stress_image, 3, axis=-1)
+            structure_strain_energy_image = np.moveaxis(structure_strain_energy_image, -1, 0)
+        structure_strain_energy_image = np.fliplr(structure_strain_energy_image)
+        # structure_strain_energy_image = np.flipud(structure_strain_energy_image)
+        return structure_strain_energy_image
 
-        return von_mises_stress_image
 
- 
+
     def plot(self, train_viz=True, axis=True):
-        plt.rcParams["figure.figsize"] = (10,10)        
+        #plt.rcParams["figure.figsize"] = (10,10)        
 
         if train_viz:
             dx, dy, nelx, nely, x, y, condition_dict, Phi = (
@@ -406,7 +447,6 @@ class sogym(gym.Env):
                             width=0.2 / 8,
                             length_includes_head=True,
                             head_starts_at_zero=False)
-
         if not axis:
             ax.set_axis_off()
 

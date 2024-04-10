@@ -370,10 +370,10 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
 
     if num_permutations is None:
         num_permutations = 1
-    else:
-        np.random.shuffle(components)
+        
 
     for _ in range(num_permutations):
+        
         obs = env.reset(start_dict=start_dict)
 
         if isinstance(env.observation_space, spaces.Dict):
@@ -411,24 +411,34 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
         expert_actions = np.array(expert_actions)
 
         results.append((expert_observations, expert_actions))
+        np.random.shuffle(components)
 
     return results
 
 
-def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False, num_processes=None, num_permutations=1):
+def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False, num_processes=None, num_permutations=1, file_fraction=1.0):
     if num_processes is None:
         num_processes = mp.cpu_count()
     pool = mp.Pool(processes=num_processes, maxtasksperchild=10)
 
     file_list = [os.path.join(directory_path, filename) for filename in os.listdir(directory_path) if filename.endswith(".json")]
 
+    # Shuffle the file list randomly
+    random.shuffle(file_list)
+
+    # Calculate the number of files to process based on the file_fraction
+    num_files_to_process = int(len(file_list) * file_fraction)
+
+    # Select the subset of files to process
+    selected_files = file_list[:num_files_to_process]
+
     process_file_partial = partial(process_file, env_kwargs, plot_terminated, directory_path=directory_path, num_permutations=num_permutations)
 
     expert_observations_list = []
     expert_actions_list = []
 
-    with tqdm(total=len(file_list), desc="Processing files", unit="file") as pbar:
-        for result in pool.imap_unordered(process_file_partial, file_list):
+    with tqdm(total=len(selected_files), desc="Processing files", unit="file") as pbar:
+        for result in pool.imap_unordered(process_file_partial, selected_files):
             for expert_observations, expert_actions in result:
                 expert_observations_list.append(expert_observations)
                 expert_actions_list.append(expert_actions)
@@ -437,7 +447,7 @@ def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=Fal
     pool.close()
     pool.join()
 
-    if isinstance(sogym().observation_space, spaces.Dict):
+    if isinstance(sogym(**env_kwargs).observation_space, spaces.Dict):
         expert_observations = {key: np.concatenate([obs[key] for obs in expert_observations_list]) for key in expert_observations_list[0].keys()}
     else:
         expert_observations = np.concatenate(expert_observations_list)
@@ -445,3 +455,4 @@ def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=Fal
     expert_actions = np.concatenate(expert_actions_list)
 
     return expert_observations, expert_actions
+

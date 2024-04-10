@@ -155,7 +155,6 @@ def pretrain_agent(
                 )
 
 
-
         train_loss /= num_batches
         if verbose:
             print(f"Train set: Average loss: {train_loss:.4f}")
@@ -286,7 +285,7 @@ def pretrain_agent(
             # Evaluate the student policy on the test environment
             mean_reward, std_reward = evaluate_policy(student, test_env, n_eval_episodes=n_eval_episodes)
             if verbose:
-                print(f"Epoch {epoch}: Mean reward = {mean_reward:.2f} +/- {std_reward:.2f}")
+                print(f"Epoch {epoch}: Mean reward = {mean_reward:.3f} +/- {std_reward:.3f}")
             # Log the evaluation metrics to Comet ML
             if experiment is not None:
                 experiment.log_metric("mean_reward", mean_reward, step=epoch)
