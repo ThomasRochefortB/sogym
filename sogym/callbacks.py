@@ -2,7 +2,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import Figure
 import matplotlib.pyplot as plt
-
+import torch
 # Class defining the callback to log figures in tensorboard:
 class FigureRecorderCallback(BaseCallback):
     
@@ -58,3 +58,14 @@ class GradientNormCallback(BaseCallback):
                 total_norm += param_norm.item() ** 2
         total_norm = total_norm ** 0.5
         self.logger.record('gradient_norm', total_norm)
+
+
+class GradientClippingCallback(BaseCallback):
+    def __init__(self, clip_value: float, verbose: int = 0):
+        super().__init__(verbose)
+        self.clip_value = clip_value
+
+    def _on_step(self) -> bool:
+        if hasattr(self.model, "policy"):
+            torch.nn.utils.clip_grad_norm_(self.model.policy.parameters(), self.clip_value)
+        return True
