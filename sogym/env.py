@@ -149,8 +149,6 @@ class sogym(gym.Env):
 
         # Let's concatenate everything into a single vector 'beta':
         self.beta = np.concatenate((support_vector.flatten(order='F'),load_vector.flatten(order='F'),volfrac_vector, domain_vector),axis=None) # The new beta vector is a 27 x 1 vector
-
-    
         self.variables=np.zeros((self.N_components*self.N_actions,1))
         self.out_conditions=self.beta
         self.action_count=0
@@ -407,7 +405,6 @@ class sogym(gym.Env):
         structure_strain_energy_image = np.fliplr(structure_strain_energy_image)
         return structure_strain_energy_image
 
-
     def plot(self, train_viz=True, axis=True):
         if train_viz:
             dx, dy, nelx, nely, x, y, condition_dict, Phi = (
@@ -420,8 +417,8 @@ class sogym(gym.Env):
                 self.x, self.y, self.conditions, self.Phi
             )
 
-        self.fig.clear()
-        ax = self.fig.add_subplot(111)
+        ax = self.fig.gca()
+        ax.clear()
 
         if self.variables_plot == [] and not train_viz:
             color = ['white']
@@ -469,6 +466,7 @@ class sogym(gym.Env):
                             width=0.2 / 8,
                             length_includes_head=True,
                             head_starts_at_zero=False)
+
         if not axis:
             ax.set_axis_off()
 
