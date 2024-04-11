@@ -63,12 +63,12 @@ def profile_and_analyze(num_episodes, env):
 
 class ImageDictExtractor(BaseFeaturesExtractor):
 
-    def __init__(self, observation_space: gym.spaces.Dict,drop_rate=0.0,activ_func_string='relu',last_conv_size=64,mlp_size=128):
+    def __init__(self, observation_space: gym.spaces.Dict,drop_rate=0.0,activ_func_string='relu',last_conv_size=128,mlp_size=128):
         # We do not know features-dim here before going over all the items,
         # so put something dummy for now. PyTorch requires calling
         # nn.Module.__init__ before adding modules
 
-        super(ImageDictExtractor, self).__init__(observation_space, features_dim=1)
+        super().__init__(observation_space, features_dim=1)
         self.drop_rate = drop_rate
         activations = {
         'relu': nn.ReLU(),
@@ -86,7 +86,7 @@ class ImageDictExtractor(BaseFeaturesExtractor):
         # so go over all the spaces and compute output feature sizes
         for key, subspace in observation_space.spaces.items():
             
-            if key =='image' or key=='von_mises_stress':
+            if key =='image' or key=='structure_strain_energy':
                 #image is channel-first in SB3 convention: (C, H, W)
                 #default is 64,128,3
                 input_h ,input_w, input_c = subspace.shape[1],subspace.shape[2],subspace.shape[0]
@@ -103,7 +103,6 @@ class ImageDictExtractor(BaseFeaturesExtractor):
                                                 nn.Flatten(),
                                             )
                 total_concat_size+= ((input_w * input_h) // 64)  * self.last_conv_size
-            
             elif key == "design_variables" or key=="volume" or key=="n_steps_left" or key =="conditions" or key=="score":
                 # run through a simple MLP
                 extractors[key] = nn.Sequential(

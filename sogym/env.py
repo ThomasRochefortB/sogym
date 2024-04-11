@@ -33,14 +33,15 @@ class sogym(gym.Env):
         self.fig = plt.figure(dpi=100)
         self.image_resolution = 64
         self.reward = 0.0
-        # series of render color for the plot function
-        self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey','wheat','purple','mediumturquoise','darkviolet','orangered']
+        self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey',
+                              'wheat','purple','mediumturquoise','darkviolet','orangered']
 
         self.action_space = spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
         if self.img_format == 'CHW':
             img_shape = (3,self.image_resolution,self.image_resolution)
         elif self.img_format == 'HWC':
             img_shape = (self.image_resolution,self.image_resolution,3)
+
         if self.observation_type =='dense':
             self.observation_space = spaces.Dict(
                                         {
@@ -50,12 +51,22 @@ class sogym(gym.Env):
                                             "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )
-        
         elif self.observation_type =='box_dense':
-            self.observation_space = spaces.Box(low=-np.pi, high=np.pi, shape=(27+1+1+self.N_components*self.N_actions,), dtype=np.float32) 
+            self.observation_space = spaces.Box(low=-np.pi, high=np.pi, 
+                                                shape=(27+1+1+self.N_components*self.N_actions,), 
+                                                dtype=np.float32) 
             
-
-        elif self.observation_type == 'image':
+        elif self.observation_type =='image':
+            self.observation_space = spaces.Dict(
+                {
+                    "image": spaces.Box(0, 255, img_shape, dtype=np.uint8),  # Image of the current design
+                    "beta": spaces.Box(-1, 2.0, (27,), dtype=np.float32),  # Description vector \beta containing (TO DO)
+                    "n_steps_left": spaces.Box(0.0, 1.0, (1,), dtype=np.float32),
+                    "design_variables": spaces.Box(-1.0, 1.0, (self.N_components * self.N_actions,), dtype=np.float32),
+                    "volume": spaces.Box(0, 1, (1,), dtype=np.float32),  # Current volume at the current step
+                }
+            )
+        elif self.observation_type == 'topopt_game':
             self.observation_space = spaces.Dict(
                 {
                     "image": spaces.Box(0, 255, img_shape, dtype=np.uint8),  # Image of the current design
@@ -67,7 +78,6 @@ class sogym(gym.Env):
                     "score": spaces.Box(-np.inf, np.inf, (1,), dtype=np.float32)
                 }
             )
-
         elif self.observation_type =='text_dict':
             self.tokenizer = tokenizer
             self.model = model
@@ -83,7 +93,7 @@ class sogym(gym.Env):
                                             }
                                         )
         else:
-            raise ValueError('Invalid observation space type. Only "dense", "box_dense" , "text_dict"(experimental) and "image" are supported.')
+            raise ValueError('Invalid observation space type. Only "dense", "box_dense", "image", "topopt_game" & "text_dict"(experimental) are supported.')
 
     def reset(self,seed=None,start_dict=None):
         seed = self.seed
@@ -163,7 +173,16 @@ class sogym(gym.Env):
                  np.float32(self.variables.flatten()))
                  ,axis=0)
 
-        elif self.observation_type == 'image':
+        elif self.observation_type =='image':
+            self.observation = {"image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
+                                "beta": np.float32(self.beta),
+                                "design_variables": np.float32(self.variables.flatten()),
+                                "volume": np.array([0.0], dtype=np.float32),
+                                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
+                                }
+
+
+        elif self.observation_type == 'topopt_game':
             if self.img_format == 'CHW':
                 empty_structure_strain_energy = np.zeros((3, self.image_resolution, self.image_resolution), dtype=np.uint8)
             elif self.img_format == 'HWC':
@@ -178,7 +197,6 @@ class sogym(gym.Env):
                                 "score": np.array([0.0], dtype=np.float32)
                                 }
 
-            
         elif self.observation_type == 'text_dict':
             self.observation = {
                 "prompt": np.float32(self.model_output),
@@ -231,7 +249,8 @@ class sogym(gym.Env):
             # Not at the end of the episode
             self.reward = 0.0
             terminated = False
-            self.calculate_compliance_and_stress(is_connected)
+            if self.observation_type =='topopt_game':
+                self.calculate_compliance_and_stress(is_connected)
         else:
             # At the end of the episode
             terminated = True
@@ -312,9 +331,17 @@ class sogym(gym.Env):
                 np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
                 np.float32(self.variables.flatten()) / np.pi),
                 axis=0)
+            
         elif self.observation_type == 'image':
+            self.observation = {
+                "image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
+                "beta": np.float32(self.beta),
+                "design_variables": np.float32(self.variables.flatten()) / np.pi,
+                "volume": np.array([self.volume], dtype=np.float32),
+                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
+            }
+        elif self.observation_type == 'topopt_game':
             structure_strain_energy_image = self.process_structure_strain_energy(is_connected)
-
             self.observation = {
                 "image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
                 "beta": np.float32(self.beta),
@@ -353,40 +380,35 @@ class sogym(gym.Env):
             strain_energy_log_normalized = (strain_energy_log - strain_energy_log_min) / (strain_energy_log_max - strain_energy_log_min + 1e-8)
 
             # Apply the jet colormap to the normalized logarithmic strain energy values
-            strain_energy_jet = plt.cm.jet(strain_energy_log_normalized)[:, :, :3]  # Remove the alpha channel
-            strain_energy_jet = (strain_energy_jet * 255).astype(np.uint8)
+            strain_energy_jet = (plt.cm.jet(strain_energy_log_normalized)[:, :, :3] * 255).astype(np.uint8)
 
             # Use self.H to display white outside of the structure
             strain_energy_jet[self.H.reshape((self.nely + 1, self.nelx + 1), order='F') < 0.1] = 255
 
-            # Resize the structure image to match the size of strain_energy_jet
-            structure_image_resized = cv2.resize(structure_image, (strain_energy_jet.shape[1], strain_energy_jet.shape[0]), interpolation=cv2.INTER_CUBIC)
+            # Resize the structure image and strain energy image to the desired resolution
+            structure_image_resized = cv2.resize(structure_image, (self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
+            strain_energy_jet_resized = cv2.resize(strain_energy_jet, (self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
 
-            # Expand the dimensions of structure_image_resized to match the number of channels in strain_energy_jet
+            # Expand the dimensions of structure_image_resized to match the number of channels in strain_energy_jet_resized
             structure_image_resized = np.expand_dims(structure_image_resized, axis=-1)
             structure_image_resized = np.repeat(structure_image_resized, 3, axis=-1)
 
             # Overlay the strain energy on the structure image
-            structure_strain_energy = cv2.addWeighted(structure_image_resized, 0.3, strain_energy_jet, 0.7, 0)
+            structure_strain_energy = cv2.addWeighted(structure_image_resized, 0.3, strain_energy_jet_resized, 0.7, 0)
         else:
             structure_strain_energy = cv2.cvtColor(structure_image, cv2.COLOR_GRAY2RGB)
-
-        # Resize the image to the desired resolution
-        structure_strain_energy_resized = cv2.resize(structure_strain_energy, (self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
+            structure_strain_energy = cv2.resize(structure_strain_energy, (self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
 
         # Flip the image horizontally
-        structure_strain_energy_image = structure_strain_energy_resized
+        structure_strain_energy_image = structure_strain_energy
+
         if self.img_format == 'CHW':
             structure_strain_energy_image = np.moveaxis(structure_strain_energy_image, -1, 0)
         structure_strain_energy_image = np.fliplr(structure_strain_energy_image)
-        # structure_strain_energy_image = np.flipud(structure_strain_energy_image)
         return structure_strain_energy_image
 
 
-
     def plot(self, train_viz=True, axis=True):
-        #plt.rcParams["figure.figsize"] = (10,10)        
-
         if train_viz:
             dx, dy, nelx, nely, x, y, condition_dict, Phi = (
                 self.last_dx, self.last_dy, self.last_nelx, self.last_nely,
@@ -451,7 +473,6 @@ class sogym(gym.Env):
             ax.set_axis_off()
 
         return self.fig
-
 
     def gen_image(self, resolution):
         self.plot(train_viz=False, axis=False)  # Pass the figure object to plot
@@ -527,8 +548,7 @@ class sogym(gym.Env):
 
         # Check connection between load labels and support label
         connec = [load in labels_support and load != 0 for load in labels_load]
-
-
+        
         # Return True if all connections are True (and not empty)
         return bool(connec) and all(connec)
 
