@@ -1,22 +1,22 @@
 common:
   tb_log: &tb_log "./tb_logs"
   net_arch: &net_arch     # Same 2 layers of 256 for critic and actor indepent of off-policy or on-policy
-    - 512  
+    - 512
     - 512
     - 512
 
 PPO:
   learning_rate: 0.0003
   n_steps: 64
-  batch_size: 1024
-  n_epochs: 10
+  batch_size: 4096
+  n_epochs: 1
   gamma: 0.99
   gae_lambda: 0.95
   clip_range: 0.2
   ent_coef: 0.0
   vf_coef: 0.5
   max_grad_norm: 0.5
-  target_kl: null
+  target_kl: 0.1
   tensorboard_log: *tb_log
 
 SAC:

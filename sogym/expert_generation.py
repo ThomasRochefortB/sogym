@@ -351,7 +351,7 @@ def variables_2_actions(env, endpoints):
 
 def process_file(env_kwargs, plot_terminated, filename, directory_path, num_permutations):
     env = sogym(**env_kwargs) if env_kwargs else sogym()
-    obs = env.reset()
+    obs,info = env.reset()
 
     file_path = os.path.join(directory_path, filename)
     mmc_solution = load_top(file_path)
@@ -370,16 +370,14 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
 
     if num_permutations is None:
         num_permutations = 1
-        
 
     for _ in range(num_permutations):
-        
-        obs = env.reset(start_dict=start_dict)
+        obs,info = env.reset(start_dict=start_dict)
 
         if isinstance(env.observation_space, spaces.Dict):
-            expert_observations = {key: [] for key in obs[0].keys()}
+            expert_observations = {key: [value] for key, value in obs.items()}
         else:
-            expert_observations = []
+            expert_observations = [obs]
 
         expert_actions = []
 
@@ -389,6 +387,7 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
             endpoints = np.append(endpoints, single_component[4])
 
             action = variables_2_actions(env, endpoints)
+            expert_actions.append(action)
 
             obs, reward, terminated, truncated, info = env.step(action)
 
@@ -398,15 +397,13 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
             else:
                 expert_observations.append(obs)
 
-            expert_actions.append(action)
-
             if terminated and plot_terminated:
                 fig = env.plot(train_viz=False, axis=True)
 
         if isinstance(env.observation_space, spaces.Dict):
-            expert_observations = {key: np.array(value) for key, value in expert_observations.items()}
+            expert_observations = {key: np.array(value[:-1]) for key, value in expert_observations.items()}
         else:
-            expert_observations = np.array(expert_observations)
+            expert_observations = np.array(expert_observations[:-1])
 
         expert_actions = np.array(expert_actions)
 
@@ -414,6 +411,7 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
         np.random.shuffle(components)
 
     return results
+
 
 
 def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False, num_processes=None, num_permutations=1, file_fraction=1.0):

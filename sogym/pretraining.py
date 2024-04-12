@@ -43,7 +43,6 @@ class ExpertDataSet(Dataset):
         return len(self.actions)
 
 
-
 def pretrain_agent(
     student,
     expert_observations,
@@ -171,6 +170,7 @@ def pretrain_agent(
     def test(model, device, test_loader):
         model.eval()
         test_loss = 0
+        test_mae = 0
         num_batches = len(test_loader)
         with th.no_grad():
             for data, target in test_loader:
@@ -198,17 +198,31 @@ def pretrain_agent(
                     target = target.long()
 
                 test_loss += criterion(action_prediction, target).item()
-        test_loss /= num_batches
-        if verbose:
-            print(f"Test set: Average loss: {test_loss:.4f}")
+                
+                # Calculate MAE
+                if isinstance(env.action_space, gym.spaces.Box):
+                    mae = th.mean(th.abs(action_prediction - target))
+                else:
+                    mae = th.mean(th.abs(th.argmax(action_prediction, dim=1) - target))
+                test_mae += mae.item()
 
-        # Log test loss to TensorBoard
+        test_loss /= num_batches
+        test_mae /= num_batches
+        if verbose:
+            print(f"Test set: Average loss: {test_loss:.4f}, Average MAE: {test_mae:.4f}")
+
+        # Log test loss and MAE to TensorBoard
         writer.add_scalar("Loss/test", test_loss, epoch)
-        # Log test loss to Comet ML
+        writer.add_scalar("MAE/test", test_mae, epoch)
+        # Log test loss and MAE to Comet ML
         if experiment is not None:
             experiment.log_metric("test_loss", test_loss, step=epoch)
+            experiment.log_metric("test_mae", test_mae, step=epoch)
+            experiment.log_metric("mae", test_mae, step=epoch)
 
-        return test_loss
+
+        return test_loss, test_mae
+
 
     expert_dataset = ExpertDataSet(expert_observations, expert_actions, env)
 
@@ -255,7 +269,7 @@ def pretrain_agent(
 
     for epoch in range(1, epochs + 1):
         train_loss = train(model, device, train_loader, optimizer, epoch, max_grad_norm=10.0)
-        test_loss = test(model, device, test_loader)
+        test_loss,test_mae = test(model, device, test_loader)
 
         train_losses.append(train_loss)
         test_losses.append(test_loss)
