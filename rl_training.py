@@ -1,4 +1,5 @@
 import os
+import comet_ml
 import numpy as np
 import gymnasium as gym
 import yaml
@@ -46,10 +47,14 @@ parser.add_argument('--resumepath', type=str, default="")
 
 parser.add_argument('--training-phase', type=str, default='naive')
 
-# Add more arguments as needed
 
 args = parser.parse_args()
 def main():
+
+
+    comet_ml.init(project_name="rl_training")
+    experiment = comet_ml.Experiment(api_key="No20MKxPKu7vWLOUQCFBRO8mo")
+
     # Set up the environment
     observation_type = "topopt_game"
     observation_type = args.observation_type
@@ -215,3 +220,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+##!python rl_training.py --observation-type topopt_game --algorithm-name PPO --training-phase naive
