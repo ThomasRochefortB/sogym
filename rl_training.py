@@ -19,6 +19,14 @@ import torch
 import multiprocessing
 import argparse
 
+import torch.nn as nn
+
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        nn.init.xavier_uniform_(m.weight)
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print('Using device:', device)
 
@@ -32,11 +40,11 @@ parser.add_argument('--algorithm-name', type=str, default="SAC",
 parser.add_argument('--algorithm-config-file', type=str, default="algorithms.yaml",
                     help='Path to the algorithm configuration file.')
 
-parser.add_argument('--resume',type = bool, default=False)
+parser.add_argument('--resume', action='store_true', help='Resume training from a saved model.')
 
 parser.add_argument('--resumepath', type=str, default="")
 
-parser.add_argument('--epochs', type=int, default=100)
+parser.add_argument('--training-phase', type=str, default='naive')
 
 # Add more arguments as needed
 
@@ -45,25 +53,23 @@ def main():
     # Set up the environment
     observation_type = "topopt_game"
     observation_type = args.observation_type
-    algorithm_name = args.algorithm_name  # or "TD3"
+    algorithm_name = args.algorithm_name  
     algorithm_config_file = args.algorithm_config_file
 
-    chosen_policy = chosen_policy = "MlpPolicy" if observation_type == 'box_dense' else "MultiInputPolicy"
+    chosen_policy = "MlpPolicy" if observation_type == 'box_dense' else "MultiInputPolicy"
     feature_extractor = ImageDictExtractor if observation_type == 'image' or observation_type == 'topopt_game' else CustomBoxDense
-    train_env = sogym(mode='train', observation_type=observation_type, vol_constraint_type='hard', resolution=50, check_connectivity=True)
-    eval_env = sogym(mode='test', observation_type=observation_type, vol_constraint_type='hard', resolution=50, check_connectivity=False)
+ 
 
     # Set up multiprocessing
     num_cpu = multiprocessing.cpu_count()
-    env = make_vec_env(lambda: train_env, n_envs=num_cpu, vec_env_cls=SubprocVecEnv)
+    train_env = make_vec_env(lambda: sogym(mode='train', observation_type=observation_type, vol_constraint_type='hard', resolution=50, check_connectivity=True), n_envs=num_cpu, vec_env_cls=SubprocVecEnv)
+    eval_env = make_vec_env(lambda: sogym(mode='test', observation_type=observation_type, vol_constraint_type='hard', resolution=50, check_connectivity=False), n_envs=1, vec_env_cls=SubprocVecEnv)
 
-    eval_env = make_vec_env(lambda: eval_env, n_envs=1, vec_env_cls=SubprocVecEnv)
 
     # Set up the model
     with open(algorithm_config_file, "r") as file:
         config = yaml.safe_load(file)
 
-    algorithm_name = "SAC"
     algorithm_params = config[algorithm_name]
 
     policy_kwargs = dict(
@@ -100,7 +106,6 @@ def main():
                     device=device, 
                     **algorithm_params)
         
-
     # Set up callbacks
     current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
     tb_log_name = f"{algorithm_name}_{current_datetime}"
@@ -112,6 +117,7 @@ def main():
         save_replay_buffer=True,
         save_vecnormalize=True,
     )
+    early_stopping = StopTrainingOnNoModelImprovement(max_no_improvement_evals=50, min_evals=100, verbose=1)
 
     eval_callback = EvalCallback(eval_env,
                                  log_path='tb_logs',
@@ -120,7 +126,9 @@ def main():
                                  n_eval_episodes=10,
                                  render=False,
                                  best_model_save_path='./checkpoints',
+                                 callback_after_eval=early_stopping,
                                  verbose=0)
+
 
     callback_list = CallbackList([eval_callback,
                                   checkpoint_callback,
@@ -128,16 +136,82 @@ def main():
                                   GradientClippingCallback(clip_value=10.0, verbose=1),
                                   GradientNormCallback(verbose=1),
                                   FigureRecorderCallback(check_freq=5000 // num_cpu, eval_env=eval_env),
-                                  StopTrainingOnNoModelImprovement(max_no_improvement_evals=50, min_evals=100, verbose=1)
-
                                   ])
+    
+    if args.training_phase =='critic' and not args.resume:
+        model.set_parameters(args.imitation_model_path)
+    if args.training_phase =='actor-critic' and not args.resume:
+        model.set_parameters(args.critic_model_path)
+
+    if args.training_phase =='critic' and args.resume:
+        model.set_parameters(args.resume_path)
+    if args.training_phase =='actor-critic' and args.resume:
+        model.set_parameters(args.resume_path)
+
+    if args.training_phase =='naive'and args.resume:
+        model.set_parameters(args.resume_path)
+
+    if args.training_phase =='critic':
+        #Freeze everything:
+        for name, param in model.policy.named_parameters():
+            if param.requires_grad:
+                param.requires_grad=False
+
+        if algorithm_name =='SAC':
+            # Unfreeze critic:
+            for param in model.policy.critic.parameters():
+                if param.requires_grad==False:
+                    param.requires_grad=True
+
+            for param in model.policy.critic_target.parameters():
+                if param.requires_grad==False:
+                    param.requires_grad=True
+            
+            #Reset critic networks:
+            if hasattr(model.policy.critic_target, 'reset_parameters'):
+                print(' resetting')
+                model.policy.critic_target.reset_parameters()
+            else:
+                model.policy.critic_target.apply(init_weights)
+
+                
+            if hasattr(model.policy.critic, 'reset_parameters'):
+                print('resetting')
+                model.policy.critic_target.reset_parameters() 
+            else:
+                model.policy.critic.apply(init_weights)
+
+
+        if algorithm_name == 'PPO':
+            for param in model.policy.mlp_extractor.value_net.parameters():
+                if param.requires_grad==False:
+                    param.requires_grad=True
+                
+            for param in model.policy.value_net.parameters():
+                if param.requires_grad==False:
+                    param.requires_grad=True
+            
+
+            if hasattr(model.policy.value_net, 'reset_parameters'):
+                print(' resetting')
+                model.policy.value_net.reset_parameters()
+            else:
+                model.policy.value_net.apply(init_weights)
+                
+            if hasattr(model.policy.mlp_extractor.value_net, 'reset_parameters'):
+                print(' resetting')
+                model.policy.mlp_extractor.value_net.reset_parameters() 
+            else:
+                model.policy.mlp_extractor.value_net.apply(init_weights)
+
+
     # Train the model
     model.learn(20000000,
                 callback=callback_list,
                 tb_log_name=tb_log_name)
 
     # Save the model
-    model.save('trained_model')
+    model.save('checkpoints/{}_final'.format(tb_log_name))
 
 if __name__ == "__main__":
     main()
