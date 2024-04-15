@@ -48,8 +48,9 @@ parser.add_argument('--resume-path', type=str, default="")
 
 parser.add_argument('--training-phase', type=str, default='naive')
 
+parser.add_argument('--replay-buffer-path', type=str, default='')
 
-args = parser.parse_args()
+args = parser.parse_args() 
 def main():
 
 
@@ -85,38 +86,51 @@ def main():
 
     # Create the model based on the algorithm name and parameters
     if algorithm_name == "SAC":
-        model = SAC(env=train_env,
-                    policy = chosen_policy, 
-                    policy_kwargs=policy_kwargs,
-                    device=device, 
-                    **algorithm_params)
+        if args.resume:
+            model = SAC.load(args.resume_path,env=train_env)
+            if args.replay_buffer_path:
+                model.load_replay_buffer(args.replay_buffer_path)
+        else:
+            model = SAC(env=train_env,
+                        policy = chosen_policy, 
+                        policy_kwargs=policy_kwargs,
+                        device=device, 
+                        **algorithm_params)
 
     elif algorithm_name == "PPO":
-        model = PPO(env=train_env, 
-                    policy = chosen_policy, 
-                    policy_kwargs=policy_kwargs,
-                    device = device, 
-                    **algorithm_params)
+        if args.resume:
+            model = PPO.load(args.resume_path,env=train_env)
+        else:
+            model = PPO(env=train_env, 
+                        policy = chosen_policy, 
+                        policy_kwargs=policy_kwargs,
+                        device = device, 
+                        **algorithm_params)
 
     elif algorithm_name == "TD3":
-        # Create the action noise object
-        n_actions = train_env.action_space.shape[-1]
-        action_noise_params = algorithm_params.pop("action_noise")
-        action_noise = NormalActionNoise(mean=action_noise_params["mean"] * np.ones(n_actions),
-                                        sigma=action_noise_params["sigma"] * np.ones(n_actions))
-        model = TD3(env=train_env,
-                    policy =chosen_policy, 
-                    policy_kwargs=policy_kwargs,
-                    action_noise=action_noise,
-                    device=device, 
-                    **algorithm_params)
+        if args.resume:
+            model = TD3.load(args.resume_path,env=train_env)
+            if args.replay_buffer_path:
+                model.load_replay_buffer(args.replay_buffer_path)
+        else:
+            # Create the action noise object
+            n_actions = train_env.action_space.shape[-1]
+            action_noise_params = algorithm_params.pop("action_noise")
+            action_noise = NormalActionNoise(mean=action_noise_params["mean"] * np.ones(n_actions),
+                                            sigma=action_noise_params["sigma"] * np.ones(n_actions))
+            model = TD3(env=train_env,
+                        policy =chosen_policy, 
+                        policy_kwargs=policy_kwargs,
+                        action_noise=action_noise,
+                        device=device, 
+                        **algorithm_params)
         
     # Set up callbacks
     current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
     tb_log_name = f"{algorithm_name}_{current_datetime}"
 
     checkpoint_callback = CheckpointCallback(
-        save_freq=50000 // num_cpu,
+        save_freq=500000 // num_cpu,
         save_path="./checkpoints/",
         name_prefix=tb_log_name,
         save_replay_buffer=True,
@@ -148,13 +162,6 @@ def main():
     if args.training_phase =='actor-critic' and not args.resume:
         model.set_parameters(args.critic_model_path)
 
-    if args.training_phase =='critic' and args.resume:
-        model.set_parameters(args.resume_path)
-    if args.training_phase =='actor-critic' and args.resume:
-        model.set_parameters(args.resume_path)
-
-    if args.training_phase =='naive'and args.resume:
-        model.set_parameters(args.resume_path)
 
     if args.training_phase =='critic':
         #Freeze everything:
@@ -208,7 +215,6 @@ def main():
                 model.policy.mlp_extractor.value_net.reset_parameters() 
             else:
                 model.policy.mlp_extractor.value_net.apply(init_weights)
-
 
     # Train the model
     model.learn(100_000_000,
