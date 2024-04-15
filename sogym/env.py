@@ -8,8 +8,8 @@ from sogym.rand_bc import gen_randombc
 import cv2
 import torch
 import math
-# import matplotlib
-# matplotlib.use('Agg')
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
 
@@ -405,6 +405,73 @@ class sogym(gym.Env):
         structure_strain_energy_image = np.fliplr(structure_strain_energy_image)
         return structure_strain_energy_image
 
+    # def plot(self, train_viz=True, axis=True):
+    #     if train_viz:
+    #         dx, dy, nelx, nely, x, y, condition_dict, Phi = (
+    #             self.last_dx, self.last_dy, self.last_nelx, self.last_nely,
+    #             self.last_x, self.last_y, self.last_conditions, self.last_Phi
+    #         )
+    #     else:
+    #         dx, dy, nelx, nely, x, y, condition_dict, Phi = (
+    #             self.dx, self.dy, self.nelx, self.nely,
+    #             self.x, self.y, self.conditions, self.Phi
+    #         )
+
+    #     ax = self.fig.gca()
+    #     ax.clear()
+
+    #     if self.variables_plot == [] and not train_viz:
+    #         color = ['white']
+    #     else:
+    #         color = self.render_colors
+
+    #     for i, c in zip(range(Phi.shape[1]), color):
+    #         ax.contourf(x, y, Phi[:, i].reshape((nely + 1, nelx + 1), order='F'), [0, 1], colors=[c])
+
+    #     ax.add_patch(plt.Rectangle((0, 0), dx, dy, clip_on=False, linewidth=1, fill=False))
+
+    #     boundary_conditions = [
+    #         (0.0, 'left', (0.0, dy * condition_dict['boundary_position']), 90),
+    #         (0.25, 'right', (dx + 0.1, dy * condition_dict['boundary_position']), 90),
+    #         (0.5, 'bottom', (dx * condition_dict['boundary_position'], dy), 0),
+    #         (0.75, 'top', (dx * condition_dict['boundary_position'], -0.1), 0)
+    #     ]
+
+    #     for boundary, name, xy, angle in boundary_conditions:
+    #         if condition_dict['selected_boundary'] == boundary:
+    #             ax.add_patch(plt.Rectangle(
+    #                 xy=xy,
+    #                 width=condition_dict['boundary_length'] * (dy if name in ['left', 'right'] else dx),
+    #                 height=0.1,
+    #                 angle=angle,
+    #                 hatch='/',
+    #                 clip_on=False,
+    #                 linewidth=0
+    #             ))
+
+    #             for i in range(condition_dict['n_loads']):
+    #                 load_pos = dy * condition_dict['load_position'][i] if name in ['left', 'right'] else dx * condition_dict['load_position'][i]
+    #                 arrow_pos = (
+    #                     (dx - condition_dict['magnitude_x'][i] * 0.2, load_pos - condition_dict['magnitude_y'][i] * 0.2)
+    #                     if name == 'left' else
+    #                     (0.0 - condition_dict['magnitude_x'][i] * 0.2, load_pos - condition_dict['magnitude_y'][i] * 0.2)
+    #                     if name == 'right' else
+    #                     (load_pos - condition_dict['magnitude_x'][i] * 0.2, -condition_dict['magnitude_y'][i] * 0.2)
+    #                     if name == 'bottom' else
+    #                     (load_pos - condition_dict['magnitude_x'][i] * 0.2, dy - condition_dict['magnitude_y'][i] * 0.2)
+    #                 )
+    #                 ax.arrow(*arrow_pos,
+    #                         dx=condition_dict['magnitude_x'][i] * 0.2,
+    #                         dy=condition_dict['magnitude_y'][i] * 0.2,
+    #                         width=0.2 / 8,
+    #                         length_includes_head=True,
+    #                         head_starts_at_zero=False)
+
+    #     if not axis:
+    #         ax.set_axis_off()
+
+    #     return self.fig
+
     def plot(self, train_viz=True, axis=True):
         if train_viz:
             dx, dy, nelx, nely, x, y, condition_dict, Phi = (
@@ -417,8 +484,9 @@ class sogym(gym.Env):
                 self.x, self.y, self.conditions, self.Phi
             )
 
-        ax = self.fig.gca()
-        ax.clear()
+        # Create a new figure for each plot
+        fig = plt.figure(dpi=100)
+        ax = fig.gca()
 
         if self.variables_plot == [] and not train_viz:
             color = ['white']
@@ -470,20 +538,42 @@ class sogym(gym.Env):
         if not axis:
             ax.set_axis_off()
 
-        return self.fig
+        fig.tight_layout(pad=0)
+        plt.close()
+        return fig
 
+
+    # def gen_image(self, resolution):
+    #     self.plot(train_viz=False, axis=False)  # Pass the figure object to plot
+    #     self.fig.tight_layout(pad=0)
+
+    #     # Convert the figure to a numpy array without rendering it to the screen
+    #     self.fig.canvas.draw()
+    #     w, h = self.fig.canvas.get_width_height()
+    #     buf = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
+    #     buf.shape = (h, w, 3)
+
+    #     # Close the figure to free up memory
+    #     plt.close(self.fig)
+
+    #     # Resize the image to the desired resolution using OpenCV
+    #     res = cv2.resize(buf, dsize=(resolution[0], resolution[1]), interpolation=cv2.INTER_CUBIC)
+    #     # Convert res to channel first if needed
+    #     if self.img_format == 'CHW':
+    #         res = np.moveaxis(res, -1, 0)
+
+    #     return res
     def gen_image(self, resolution):
-        self.plot(train_viz=False, axis=False)  # Pass the figure object to plot
-        self.fig.tight_layout(pad=0)
+        fig = self.plot(train_viz=False, axis=False)  # Pass the figure object to plot
 
         # Convert the figure to a numpy array without rendering it to the screen
-        self.fig.canvas.draw()
-        w, h = self.fig.canvas.get_width_height()
-        buf = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
+        fig.canvas.draw()
+        w, h = fig.canvas.get_width_height()
+        buf = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
         buf.shape = (h, w, 3)
 
         # Close the figure to free up memory
-        plt.close(self.fig)
+        plt.close(fig)
 
         # Resize the image to the desired resolution using OpenCV
         res = cv2.resize(buf, dsize=(resolution[0], resolution[1]), interpolation=cv2.INTER_CUBIC)
@@ -492,6 +582,7 @@ class sogym(gym.Env):
             res = np.moveaxis(res, -1, 0)
 
         return res
+
 
     def check_connec(self):
         # Load grayscale image and threshold to create a binary image

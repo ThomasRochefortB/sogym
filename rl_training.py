@@ -1,4 +1,5 @@
 import os
+os.environ['OPENBLAS_NUM_THREADS'] = '1'       #Disactivate multiprocessing for numpy
 import comet_ml
 import numpy as np
 import gymnasium as gym
