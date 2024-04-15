@@ -43,7 +43,7 @@ parser.add_argument('--algorithm-config-file', type=str, default="algorithms.yam
 
 parser.add_argument('--resume', action='store_true', help='Resume training from a saved model.')
 
-parser.add_argument('--resumepath', type=str, default="")
+parser.add_argument('--resume-path', type=str, default="")
 
 parser.add_argument('--training-phase', type=str, default='naive')
 
@@ -56,7 +56,6 @@ def main():
     experiment = comet_ml.Experiment(api_key="No20MKxPKu7vWLOUQCFBRO8mo")
 
     # Set up the environment
-    observation_type = "topopt_game"
     observation_type = args.observation_type
     algorithm_name = args.algorithm_name  
     algorithm_config_file = args.algorithm_config_file
@@ -122,7 +121,7 @@ def main():
         save_replay_buffer=True,
         save_vecnormalize=True,
     )
-    early_stopping = StopTrainingOnNoModelImprovement(max_no_improvement_evals=50, min_evals=100, verbose=1)
+    early_stopping = StopTrainingOnNoModelImprovement(max_no_improvement_evals=100, min_evals=100, verbose=1)
 
     eval_callback = EvalCallback(eval_env,
                                  log_path='tb_logs',
@@ -131,14 +130,14 @@ def main():
                                  n_eval_episodes=10,
                                  render=False,
                                  best_model_save_path='./checkpoints',
-                                 callback_after_eval=early_stopping,
+                                 #callback_after_eval=early_stopping,
                                  verbose=0)
 
 
     callback_list = CallbackList([eval_callback,
                                   checkpoint_callback,
                                   MaxRewardCallback(verbose=1),
-                                  GradientClippingCallback(clip_value=10.0, verbose=1),
+                                  #GradientClippingCallback(clip_value=10.0, verbose=1),
                                   GradientNormCallback(verbose=1),
                                   FigureRecorderCallback(check_freq=5000 // num_cpu, eval_env=eval_env),
                                   ])
@@ -211,7 +210,7 @@ def main():
 
 
     # Train the model
-    model.learn(20000000,
+    model.learn(100_000_000,
                 callback=callback_list,
                 tb_log_name=tb_log_name)
 
@@ -222,4 +221,4 @@ if __name__ == "__main__":
     main()
 
 
-##!python rl_training.py --observation-type topopt_game --algorithm-name PPO --training-phase naive
+##!python rl_training.py --observation-type topopt_game --algorithm-name SAC --training-phase naive
