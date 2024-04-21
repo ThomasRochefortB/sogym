@@ -1,5 +1,4 @@
-import gymnasium as gym
-from gymnasium import spaces
+import gym
 from sogym.struct import build_design, calculate_compliance, calculate_strains, calculate_stresses
 from sogym.rand_bc import generate_prompt
 import numpy as np
@@ -36,46 +35,46 @@ class sogym(gym.Env):
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey',
                               'wheat','purple','mediumturquoise','darkviolet','orangered']
 
-        self.action_space = spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
+        self.action_space = gym.spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
         if self.img_format == 'CHW':
             img_shape = (3,self.image_resolution,self.image_resolution)
         elif self.img_format == 'HWC':
             img_shape = (self.image_resolution,self.image_resolution,3)
 
         if self.observation_type =='dense':
-            self.observation_space = spaces.Dict(
+            self.observation_space = gym.spaces.Dict(
                                         {
-                                            "beta": spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
-                                            "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
-                                            "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
+                                            "beta": gym.spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
+                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )
         elif self.observation_type =='box_dense':
-            self.observation_space = spaces.Box(low=-np.pi, high=np.pi, 
+            self.observation_space = gym.spaces.Box(low=-np.pi, high=np.pi, 
                                                 shape=(27+1+1+self.N_components*self.N_actions,), 
                                                 dtype=np.float32) 
             
         elif self.observation_type =='image':
-            self.observation_space = spaces.Dict(
+            self.observation_space = gym.spaces.Dict(
                 {
-                    "image": spaces.Box(0, 255, img_shape, dtype=np.uint8),  # Image of the current design
-                    "beta": spaces.Box(-1, 2.0, (27,), dtype=np.float32),  # Description vector \beta containing (TO DO)
-                    "n_steps_left": spaces.Box(0.0, 1.0, (1,), dtype=np.float32),
-                    "design_variables": spaces.Box(-1.0, 1.0, (self.N_components * self.N_actions,), dtype=np.float32),
-                    "volume": spaces.Box(0, 1, (1,), dtype=np.float32),  # Current volume at the current step
+                    "image": gym.spaces.Box(0, 255, img_shape, dtype=np.uint8),  # Image of the current design
+                    "beta": gym.spaces.Box(-1, 2.0, (27,), dtype=np.float32),  # Description vector \beta containing (TO DO)
+                    "n_steps_left": gym.spaces.Box(0.0, 1.0, (1,), dtype=np.float32),
+                    "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components * self.N_actions,), dtype=np.float32),
+                    "volume": gym.spaces.Box(0, 1, (1,), dtype=np.float32),  # Current volume at the current step
                 }
             )
         elif self.observation_type == 'topopt_game':
-            self.observation_space = spaces.Dict(
+            self.observation_space = gym.spaces.Dict(
                 {
-                    "image": spaces.Box(0, 255, img_shape, dtype=np.uint8),  # Image of the current design
-                    "beta": spaces.Box(-1, 2.0, (27,), dtype=np.float32),  # Description vector \beta containing (TO DO)
-                    "n_steps_left": spaces.Box(0.0, 1.0, (1,), dtype=np.float32),
-                    "design_variables": spaces.Box(-1.0, 1.0, (self.N_components * self.N_actions,), dtype=np.float32),
-                    "volume": spaces.Box(0, 1, (1,), dtype=np.float32),  # Current volume at the current step
-                    "structure_strain_energy": spaces.Box(0, 255, img_shape, dtype=np.uint8),
-                    "score": spaces.Box(-np.inf, np.inf, (1,), dtype=np.float32)
+                    "image": gym.spaces.Box(0, 255, img_shape, dtype=np.uint8),  # Image of the current design
+                    "beta": gym.spaces.Box(-1, 2.0, (27,), dtype=np.float32),  # Description vector \beta containing (TO DO)
+                    "n_steps_left": gym.spaces.Box(0.0, 1.0, (1,), dtype=np.float32),
+                    "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components * self.N_actions,), dtype=np.float32),
+                    "volume": gym.spaces.Box(0, 1, (1,), dtype=np.float32),  # Current volume at the current step
+                    "structure_strain_energy": gym.spaces.Box(0, 255, img_shape, dtype=np.uint8),
+                    "score": gym.spaces.Box(-np.inf, np.inf, (1,), dtype=np.float32)
                 }
             )
         elif self.observation_type =='text_dict':
@@ -83,13 +82,13 @@ class sogym(gym.Env):
             self.model = model
             #device agnostic code:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            self.observation_space = spaces.Dict(
+            self.observation_space = gym.spaces.Dict(
                                         spaces={
                                             # Prompt will have no max min (-inf,inf)
-                                            "prompt": spaces.Box(-np.inf,np.inf, (768*512,),dtype=np.float32), # Description vector \beta containing (TO DO)
-                                            "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
-                                            "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
+                                            "prompt": gym.spaces.Box(-np.inf,np.inf, (768*512,),dtype=np.float32), # Description vector \beta containing (TO DO)
+                                            "n_steps_left":gym.spaces.Box(0.0,1.0,(1,),dtype=np.float32),
+                                            "design_variables": gym.spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
+                                            "volume":gym.spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )
         else:
@@ -205,7 +204,7 @@ class sogym(gym.Env):
         else:
             raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
         info ={}
-        return (self.observation,info )
+        return self.observation
         
         
     def step(self, action, evaluate=True):
@@ -264,7 +263,7 @@ class sogym(gym.Env):
         self.update_observation(is_connected)
         self.saved_volume.append(self.volume)
 
-        return self.observation, self.reward, terminated, truncated, info
+        return self.observation, self.reward, terminated, info
 
     def calculate_compliance_and_stress(self, is_connected):
         self.compliance, self.volume, self.U, self.F = calculate_compliance(

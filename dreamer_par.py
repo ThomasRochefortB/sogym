@@ -9,14 +9,14 @@ def main():
   config = embodied.Config(dreamerv3.configs['defaults'])
   config = config.update(dreamerv3.configs['small'])
   config = config.update({
-      'run.logdir': '~/logdir/run1',
+      'logdir': './logdir/run1',
       'run.train_ratio': 64,
       'run.log_every': 30,  # Seconds
       'batch_size': 16,
       'encoder.mlp_keys': ['conditions','volume','design_variables','n_steps_left'],
       'decoder.mlp_keys':  ['conditions','volume','design_variables','n_steps_left'],
-      'encoder.cnn_keys': 'image',
-      'decoder.cnn_keys': 'image',
+      'encoder.cnn_keys': ['image'],
+      'decoder.cnn_keys': ['image'],
        'jax.platform': 'cpu',
        'envs.amount':16,
        'encoder.resize':'stride3',
@@ -43,7 +43,7 @@ def main():
   from functools import partial as bind
   from embodied import wrappers
 
-  env = sogym(nelx=100,nely=50,mode='train',observation_type='image')  # Replace this with your Gym env.
+  env = sogym(mode='train',observation_type='topopt_game',vol_constraint_type = 'hard',resolution=50,img_format = 'HWC',check_connectivity=True)  # Replace this with your Gym env.
   env = from_gym.FromGym(env)
   def make_envs(config, **overrides):
     suite, task = config.task.split('_', 1)
