@@ -268,7 +268,7 @@ def pretrain_agent(
         experiment = None
 
     for epoch in range(1, epochs + 1):
-        train_loss = train(model, device, train_loader, optimizer, epoch, max_grad_norm=10.0)
+        train_loss = train(model, device, train_loader, optimizer, epoch, max_grad_norm=1.0)
         test_loss,test_mae = test(model, device, test_loader)
 
         train_losses.append(train_loss)
@@ -298,6 +298,8 @@ def pretrain_agent(
         if epoch % eval_freq == 0:
             # Evaluate the student policy on the test environment
             mean_reward, std_reward = evaluate_policy(student, test_env, n_eval_episodes=n_eval_episodes)
+            writer.add_scalar("mean_reward", mean_reward, epoch)
+            writer.add_scalar("std_reward", std_reward, epoch)
             if verbose:
                 print(f"Epoch {epoch}: Mean reward = {mean_reward:.3f} +/- {std_reward:.3f}")
             # Log the evaluation metrics to Comet ML

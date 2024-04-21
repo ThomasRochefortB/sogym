@@ -57,7 +57,6 @@ def main():
     with open(algorithm_config_file, "r") as file:
         config = yaml.safe_load(file)
 
-    algorithm_name = "SAC"
     algorithm_params = config[algorithm_name]
 
     policy_kwargs = dict(
@@ -122,7 +121,7 @@ def main():
         seed=1,
         verbose=True,
         test_batch_size=512,
-        early_stopping_patience=300,
+        early_stopping_patience=100,
         plot_curves=True,
         tensorboard_log_dir=f"imitation_tb_logs/{experiment_name}",
         save_path=f"checkpoints/{experiment_name}",
@@ -130,7 +129,7 @@ def main():
         comet_ml_project_name="pretraining_rl",
         comet_ml_experiment_name=experiment_name,
         eval_freq=5,
-        l2_reg_strength=0.001,
+        l2_reg_strength=0.00,
     )
 
 if __name__ == "__main__":

@@ -152,7 +152,7 @@ def main():
     callback_list = CallbackList([eval_callback,
                                   checkpoint_callback,
                                   MaxRewardCallback(verbose=1),
-                                  #GradientClippingCallback(clip_value=10.0, verbose=1),
+                                  GradientClippingCallback(clip_value=0.5, verbose=1),
                                   GradientNormCallback(verbose=1),
                                   FigureRecorderCallback(check_freq=5000 // num_cpu, eval_env=eval_env),
                                   ])
