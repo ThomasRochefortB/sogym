@@ -18,13 +18,14 @@ def main():
       'logdir': f'./logdir/{embodied.timestamp()}-example',
       'run.train_ratio': 32,
       'run.num_envs': 10,
-      'run.num_envs_eval': 1,
+      'run.num_envs_eval': 10,
     #   'enc.simple.mlp_keys': ['beta','volume','design_variables','n_steps_left'],
     #   'dec.simple.mlp_keys':  ['beta','volume','design_variables','n_steps_left'],
     #   'enc.simple.cnn_keys': ['image','structure_strain_energy'],
     #   'dec.simple.cnn_keys': ['image','structure_strain_energy'],
     #   'jax.policy_devices': [1],
     #   'jax.train_devices' : [1],
+    'jax.platform': 'gpu',
     'enc.spaces':['image','structure_strain_energy'],
     'dec.spaces':['image','structure_strain_energy'],
 
@@ -79,6 +80,7 @@ def main():
     kwargs['chunksize'] = config.replay.chunksize
     replay = embodied.replay.Replay(length, size, directory, **kwargs)
     return replay
+    
   def make_train_replay(config):
     return embodied.replay.Replay(
         length=config.batch_length,
@@ -99,7 +101,6 @@ def main():
     env = sogym(mode='train',observation_type='topopt_game',vol_constraint_type = 'hard',resolution=50,img_format = 'HWC',check_connectivity=True) # Replace this with your Gym env.
     # env = StepAPICompatibility(env[0])
     env = from_gym.FromGym(env)
-
     env = dreamerv3.wrap_env(env, config)
     return env
 
@@ -108,7 +109,6 @@ def main():
     env = sogym(mode='test',observation_type='topopt_game',vol_constraint_type = 'hard',resolution=50,img_format = 'HWC',check_connectivity=True) # Replace this with your Gym env.
     # env = StepAPICompatibility(env[0])
     env = from_gym.FromGym(env)
-
     env = dreamerv3.wrap_env(env, config)
     return env
   

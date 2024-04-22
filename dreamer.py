@@ -14,7 +14,7 @@ def main():
   config = embodied.Config(dreamerv3.configs['defaults'])
   config = config.update(dreamerv3.configs['medium'])
   config = config.update({
-      'logdir': './logdir/run3',
+      'logdir': './logdir/run4',
       'run.train_ratio': 64,
       'run.log_every': 30,  # Seconds
       'batch_size': 16,
@@ -55,7 +55,7 @@ def main():
 
   agent = dreamerv3.Agent(env.obs_space, env.act_space, step, config)
   replay = embodied.replay.Uniform(config.batch_length, config.replay_size, logdir / 'replay')
-  eval_replay = embodied.replay.Uniform(config.batch_length, config.replay_size, logdir / 'evalreplay')
+  eval_replay = embodied.replay.Uniform(config.batch_length, int(config.replay_size/10), logdir / 'evalreplay')
   args = embodied.Config(**config.run, logdir=config.logdir, batch_steps=config.batch_size * config.batch_length)
   # embodied.run.train(agent, env, replay, logger, args)
   embodied.run.train_eval(agent,env, eval_env, replay, eval_replay, logger, args)
