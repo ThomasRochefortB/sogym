@@ -9,6 +9,10 @@
 The environment is based on the topology optimization framework of Moving Morphable Components [1]. The design task is framed as a sequential decision process where at each timestep, the agent has to place one components.
 
 The environment samples from the following boundary conditions distribution at the start of each episode:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ThomasRochefortB/sogym_v2/alternative/docs/BCs.png?token=GHSAT0AAAAAACRL6NQLAMKHI6OULSADK4QAZRH2MSA" alt="Boundary Conditions Visualization" style="background-color:white; display: block; margin: auto;" width="600"/>
+</p>
 ### Table 1: Parameters Defining the Boundary Conditions Distribution
 
 | Parameter | Name            | Distribution                      |
