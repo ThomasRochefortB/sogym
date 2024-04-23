@@ -1,4 +1,4 @@
-# so_gym
+# SOgym
 Gym environment for developing structural optimization problems using deep reinforcement learning. 
 
 ![alt text](https://github.com/ThomasRochefortB/so_gym/blob/main/docs/top.png?raw=true)
