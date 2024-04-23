@@ -8,15 +8,27 @@
 
 The environment is based on the topology optimization framework of Moving Morphable Components [1]. The design task is framed as a sequential decision process where at each timestep, the agent has to place one components.
 
-The environment consists of a 2 x 1 rectangular beam and the boundary conditions are randombly varied between episodes according to the following 6 loading cases:
+The environment samples from the following boundary conditions distribution at the start of each episode:
+### Table 1: Parameters Defining the Boundary Conditions Distribution
 
-![alt text](https://github.com/ThomasRochefortB/so_gym/blob/main/docs/boundary_conditions.png?raw=true)
+| Parameter | Name            | Distribution                      |
+|-----------|-----------------|-----------------------------------|
+| h         | Height          | [1.0, 2.0]                        |
+| w         | Width           | [1.0, 2.0]                        |
+| L_s       | Support Length  | 50% to 75%                        |
+| P_s       | Support Position| 0 to (100% of L_s)                |
+| P_L       | Load Position   | 0% to 100% of boundary opposite from support |
+| θ_L       | Load Orientation| [0°,360°] *                       |
+
+*The selected angle is filtered to ensure there is at least 45 degrees of difference with the support normal.
+
 
 The blue wall represents a fully supported boundary and the red boundary the region where a unit load with varying orientation is randomly placed.
 
 The environment's reward function can be modified to fit multiple constrained topology optimization objectives such as:
 
-* Compliance minimization under volume constraint [Implemented]
+* Compliance minimization under hard volume constraint [Implemented]
+* Compliance minimization under soft volume constraint [Implemented]
 * Compliance minimization under global/local stress constraint
 * Volume minimization under compliance constraint
 * Combined volume and compliance minimzation
