@@ -24,12 +24,16 @@ The environment's reward function can be modified to fit multiple constrained to
 
 
 ---
-## Leaderboard
-| **Method** | **Reward function** |                              |
-|------------|---------------------|------------------------------|
-|            |      **1/Comp**     | 1/Comp * ( Volume/V* -1) |
-|   **PPO**  |         TBD         |              TBD             |
-|   **TD3**  |         TBD         |              TBD             |
+# SOgym Leaderboard
+
+## Observation Space Configurations and Algorithms
+
+| Observation Space | PPO           | SAC           | DreamerV3     |
+|-------------------|---------------|---------------|---------------|
+| Dense             | Result for PPO| Result for SAC| Result for DreamerV3|
+| Image             | Result for PPO| Result for SAC| Result for DreamerV3|
+| TopOpt Game       | Result for PPO| Result for SAC| Result for DreamerV3|
+
 
 
 ---
