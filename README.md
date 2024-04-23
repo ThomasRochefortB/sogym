@@ -1,7 +1,7 @@
 # SOgym
 Gym environment for developing structural optimization problems using deep reinforcement learning. 
 
-![alt text](https://github.com/ThomasRochefortB/so_gym/blob/main/docs/top.png?raw=true)
+![alt text](https://github.com/ThomasRochefortB/so_gym/blob/main/docs/SOGYM_LOGO.png?raw=true)
 
 The environment is based on the topology optimization framework of Moving Morphable Components [1]. The design task is framed as a sequential decision process where at each timestep, the agent has to place one components.
 
