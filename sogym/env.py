@@ -18,7 +18,12 @@ class sogym(gym.Env):
 
     def __init__(self,N_components=8,resolution = 100, observation_type = 'dense',
                  mode = 'train',img_format='CHW',check_connectivity = False, 
-                 seed=None,vol_constraint_type='hard',model=None,tokenizer=None):
+                 seed=None,vol_constraint_type='hard',model=None,tokenizer=None,
+                 std_strain = False):
+        
+        # Check if std_strain is True and observation_type is not 'topopt_game'
+        if std_strain and observation_type != 'topopt_game':
+            raise ValueError("If std_strain is True, observation_type must be 'topopt_game'.")
      
         self.N_components = N_components
         self.mode = mode
@@ -354,8 +359,7 @@ class sogym(gym.Env):
                 "volume": np.array([self.volume], dtype=np.float32),
                 "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
                 "structure_strain_energy": structure_strain_energy_image,
-                "score": np.array([1 / np.log(self.compliance / len(self.conditions['loaddof_x']) + 1e-8)], dtype=np.float32)
-
+                "score": np.array([1 / np.log(self.compliance / len(self.conditions['loaddof_x']) + 1e-8)], dtype=np.float32) if self.volume <= self.conditions['volfrac'] and is_connected else np.array([0.0], dtype=np.float32)
             }
 
         elif self.observation_type == 'text_dict':
