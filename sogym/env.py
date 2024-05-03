@@ -324,7 +324,6 @@ class sogym(gym.Env):
 
         return reward
 
-
     def update_observation(self,is_connected):
         if self.observation_type == 'dense':
             self.observation = {
