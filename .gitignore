@@ -136,6 +136,7 @@ model_saved.zip
 dataset/
 tb_logs/
 imit_tensorboard/
+imitation_tb_logs/
 logdir/
 *.zip
 *.pkl
