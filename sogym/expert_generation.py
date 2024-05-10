@@ -1,25 +1,31 @@
+# Standard library imports
+import codecs
+import datetime
+import glob
+import json
+import multiprocessing as mp
+import os
+import pickle
+import random
+import re
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from itertools import permutations
+from multiprocessing import Pool, cpu_count
 
+# Third-party imports
+import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+from gymnasium import spaces
+
+# Local module imports from sogym
 from sogym.env import sogym
 from sogym.mmc_optim import run_mmc
-import datetime
-import os
-import json
-import numpy as np
-import codecs
-import multiprocessing as mp
-import glob
 from sogym.struct import build_design
+
+# Local module imports from imitation
 from imitation.data.types import Trajectory
-from itertools import permutations
-import random
-from concurrent.futures import ProcessPoolExecutor,ThreadPoolExecutor
-from tqdm import tqdm
-import re
-from multiprocessing import Pool, cpu_count
-import pickle
-from gymnasium import spaces
-import matplotlib.pyplot as plt
-from functools import partial
+
 
 # Let's load an expert sample:
 def count_top (filepath):
@@ -420,9 +426,6 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
 
 
 
-import multiprocessing as mp
-from functools import partial
-from tqdm import tqdm
 
 def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False, num_processes=None, num_permutations=1, file_fraction=1.0):
     if num_processes is None:
@@ -449,6 +452,10 @@ def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=Fal
                     expert_observations_list.append(expert_observations)
                     expert_actions_list.append(expert_actions)
             pbar.update(1)
+
+        # Exhaust the iterator to ensure all tasks are completed
+        for _ in results:
+            pass
 
     pool.close()
     pool.join()
