@@ -6,7 +6,6 @@ import numpy as np
 import random
 from sogym.rand_bc import gen_randombc
 import cv2
-import torch
 import math
 import matplotlib
 matplotlib.use('Agg')
@@ -78,20 +77,7 @@ class sogym(gym.Env):
                     "score": spaces.Box(-np.inf, np.inf, (1,), dtype=np.float32)
                 }
             )
-        elif self.observation_type =='text_dict':
-            self.tokenizer = tokenizer
-            self.model = model
-            #device agnostic code:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            self.observation_space = spaces.Dict(
-                                        spaces={
-                                            # Prompt will have no max min (-inf,inf)
-                                            "prompt": spaces.Box(-np.inf,np.inf, (768*512,),dtype=np.float32), # Description vector \beta containing (TO DO)
-                                            "n_steps_left":spaces.Box(0.0,1.0,(1,),dtype=np.float32),
-                                            "design_variables": spaces.Box(-1.0, 1.0, (self.N_components*self.N_actions,),dtype=np.float32),
-                                            "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
-                                            }
-                                        )
+        
         else:
             raise ValueError('Invalid observation space type. Only "dense", "box_dense", "image", "topopt_game" & "text_dict"(experimental) are supported.')
 
@@ -426,6 +412,8 @@ class sogym(gym.Env):
             )
 
         # Create a new figure for each plot
+        plt.rcParams["figure.figsize"] = (5*dx,5*dy)
+
         fig = plt.figure(dpi=100)
         ax = fig.gca()
 
