@@ -3,9 +3,8 @@
   Gym environment for developing structural optimization problems using deep reinforcement learning.
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/ThomasRochefortB/sogym_v2/alternative/docs/SOGYM_LOGO.png?token=GHSAT0AAAAAACRL6NQKA4ESORH7WSD22RDGZRHZR2A" alt="SOgym Logo" width="200"/>
+  <img src="https://github.com/ThomasRochefortB/sogym_v2/blob/alternative/docs/SOGYM_LOGO.png?raw=true" alt="SOgym Logo" width="200"/>
 </p>
-
 The environment is based on the topology optimization framework of Moving Morphable Components [1]. The design task is framed as a sequential decision process where at each timestep, the agent has to place one component.
 
 ## Boundary Conditions
@@ -14,7 +13,7 @@ The environment samples from the following boundary conditions distribution at t
 
 <div align="center">
   <p>
-    <img src="https://raw.githubusercontent.com/ThomasRochefortB/sogym_v2/alternative/docs/BCs.png?token=GHSAT0AAAAAACRL6NQLKI7UTRBYLTNQEALOZRH2QWA" alt="Boundary Conditions Visualization" style="background-color:white; display: block; margin: auto;" width="300"/>
+    <img src="https://github.com/ThomasRochefortB/sogym_v2/blob/alternative/docs/BCs.png?raw=true" alt="Boundary Conditions Visualization" style="background-color:white; display: block; margin: auto;" width="300"/>
   </p>
 
   <h4>Table 1: Parameters Defining the Boundary Conditions Distribution</h3>

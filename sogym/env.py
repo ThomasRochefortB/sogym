@@ -18,14 +18,19 @@ class sogym(gym.Env):
 
     def __init__(self,N_components=8,resolution = 100, observation_type = 'dense',
                  mode = 'train',img_format='CHW',check_connectivity = False, 
-                 seed=None,vol_constraint_type='hard',model=None,tokenizer=None):
-     
+                 seed=None,vol_constraint_type='hard',model=None,tokenizer=None,
+                 use_std_strain = False):
+        
+        # Check if std_strain is True and observation_type is not 'topopt_game'
+        if use_std_strain and observation_type != 'topopt_game':
+            raise ValueError("If std_strain is True, observation_type must be 'topopt_game'.")
+        self.use_std_strain = use_std_strain
         self.N_components = N_components
         self.mode = mode
         self.observation_type = observation_type
         self.img_format = img_format
         self.vol_constraint_type = vol_constraint_type
-        self.check_connectivity = check_connectivity
+        self.check_connectivity = check_connectivity # is_connected will always be True if this condition is False.
         self.seed = seed
         self.N_actions = 6 
         self.counter=0  
@@ -287,8 +292,10 @@ class sogym(gym.Env):
             stress_xx, stress_yy, stress_xy = calculate_stresses(strain_xx, strain_yy, strain_xy)
 
             self.strain_energy = 0.5 * (stress_xx * strain_xx + stress_yy * strain_yy + 2 * stress_xy * strain_xy)
+            self.std_strain = (self.strain_energy.std())/(self.strain_energy.mean()+self.strain_energy.std())
         else:
             self.strain_energy = None
+            self.std_strain = None
 
     def save_last_state(self):
         self.last_Phi = self.Phi
@@ -298,20 +305,17 @@ class sogym(gym.Env):
     def calculate_reward(self, is_connected):
         if self.vol_constraint_type == 'hard':
             if self.volume <= self.conditions['volfrac'] and is_connected:
-                if self.compliance > 0 and len(self.conditions['loaddof_x']) > 0:
-                    denominator = np.log(self.compliance / len(self.conditions['loaddof_x']) + 1e-8)
-                    reward = 1 / denominator
+                denominator = np.log(self.compliance / len(self.conditions['loaddof_x']) + 1e-8)
+                if self.use_std_strain:
+                    reward = (1 / denominator) * (1 - self.std_strain)
                 else:
-                    reward = 0.0
+                    reward = 1 / denominator
             else:
                 reward = 0.0
-        else:
+        else: # Soft volume constraint
             if is_connected:
-                if self.compliance > 0 and len(self.conditions['loaddof_x']) > 0:
-                    denominator = np.log(self.compliance / len(self.conditions['loaddof_x']) + 1e-8)
-                    reward = (1 / denominator) * (1 - abs(self.volume - self.conditions['volfrac']))**2
-                else:
-                    reward = 0.0
+                denominator = np.log(self.compliance / len(self.conditions['loaddof_x']) + 1e-8)
+                reward = (1 / denominator) * (1 - abs(self.volume - self.conditions['volfrac']))**2
             else:
                 reward = 0.0
 
@@ -319,7 +323,6 @@ class sogym(gym.Env):
             reward = 0.0
 
         return reward
-
 
     def update_observation(self,is_connected):
         if self.observation_type == 'dense':
@@ -354,8 +357,7 @@ class sogym(gym.Env):
                 "volume": np.array([self.volume], dtype=np.float32),
                 "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
                 "structure_strain_energy": structure_strain_energy_image,
-                "score": np.array([1 / np.log(self.compliance / len(self.conditions['loaddof_x']) + 1e-8)], dtype=np.float32)
-
+                "score": np.array([1 / np.log(self.compliance / len(self.conditions['loaddof_x']) + 1e-8)], dtype=np.float32) if self.volume <= self.conditions['volfrac'] and is_connected else np.array([0.0], dtype=np.float32)
             }
 
         elif self.observation_type == 'text_dict':

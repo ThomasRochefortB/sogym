@@ -37,6 +37,12 @@ def main(argv=None):
   config = embodied.Flags(config).parse(other)
   config = config.update(
       logdir=config.logdir.format(timestamp=embodied.timestamp()))
+  config = config.update({
+      'run.train_ratio': 32,
+        'enc.spaces': 'beta|design_variables|image|n_steps_left|score|structure_strain_energy|volume',
+        'dec.spaces': 'beta|design_variables|image|n_steps_left|score|structure_strain_energy|volume'
+
+  })
   args = embodied.Config(
       **config.run,
       logdir=config.logdir,
@@ -70,7 +76,7 @@ def main(argv=None):
         bind(make_replay, config, 'replay'),
         bind(make_replay, config, 'eval_replay', is_eval=True),
         bind(make_env, config),
-        bind(make_env, config),
+        bind(make_eval_env, config),
         bind(make_logger, config), args)
 
   elif args.script == 'train_holdout':
@@ -167,71 +173,43 @@ def make_replay(config, directory=None, is_eval=False, rate_limit=False):
   return replay
 
 
-# def make_env(config, index, **overrides):
-#   suite, task = config.task.split('_', 1)
-#   if suite == 'memmaze':
-#     from embodied.envs import from_gym
-#     import memory_maze  # noqa
-#   ctor = {
-#       'dummy': 'embodied.envs.dummy:Dummy',
-#       'gym': 'embodied.envs.from_gym:FromGym',
-#       'dm': 'embodied.envs.from_dmenv:FromDM',
-#       'crafter': 'embodied.envs.crafter:Crafter',
-#       'dmc': 'embodied.envs.dmc:DMC',
-#       'atari': 'embodied.envs.atari:Atari',
-#       'atari100k': 'embodied.envs.atari:Atari',
-#       'dmlab': 'embodied.envs.dmlab:DMLab',
-#       'minecraft': 'embodied.envs.minecraft:Minecraft',
-#       'loconav': 'embodied.envs.loconav:LocoNav',
-#       'pinpad': 'embodied.envs.pinpad:PinPad',
-#       'langroom': 'embodied.envs.langroom:LangRoom',
-#       'procgen': 'embodied.envs.procgen:ProcGen',
-#       'bsuite': 'embodied.envs.bsuite:BSuite',
-#       'memmaze': lambda task, **kw: from_gym.FromGym(
-#           f'MemoryMaze-{task}-ExtraObs-v0', **kw),
-#   }[suite]
-#   if isinstance(ctor, str):
-#     module, cls = ctor.split(':')
-#     module = importlib.import_module(module)
-#     ctor = getattr(module, cls)
-#   kwargs = config.env.get(suite, {})
-#   kwargs.update(overrides)
-#   if kwargs.pop('use_seed', False):
-#     kwargs['seed'] = hash((config.seed, index)) % (2 ** 32 - 1)
-#   if kwargs.pop('use_logdir', False):
-#     kwargs['logdir'] = embodied.Path(config.logdir) / f'env{index}'
-#   env = ctor(task, **kwargs)
-#   return wrap_env(env, config)
-
 def make_env(config, env_id=0):
     from embodied.envs import from_gym
     from sogym.env_gym import sogym
-    env = sogym(mode='train',observation_type='topopt_game',vol_constraint_type = 'hard',resolution=50,img_format = 'HWC',check_connectivity=True) # Replace this with your Gym env.
-    # env = StepAPICompatibility(env[0])
+    env = sogym(mode='train',observation_type='topopt_game',vol_constraint_type = 'hard',resolution=50,img_format = 'HWC',check_connectivity=True,use_std_strain=True) # Replace this with your Gym env.
+    env = from_gym.FromGym(env)
+    env = wrap_env(env, config)
+    return env
+
+def make_eval_env(config, env_id=0):
+    from embodied.envs import from_gym
+    from sogym.env_gym import sogym
+    env = sogym(mode='test',observation_type='topopt_game',vol_constraint_type = 'hard',resolution=50,img_format = 'HWC',check_connectivity=True,use_std_strain=True) # Replace this with your Gym env.
     env = from_gym.FromGym(env)
 
     env = wrap_env(env, config)
     return env
 
-# def wrap_env(env, config):
-#   args = config.wrapper
-#   for name, space in env.act_space.items():
-#     if name == 'reset':
-#       continue
-#     elif not space.discrete:
-#       env = wrappers.NormalizeAction(env, name)
-#       if args.discretize:
-#         env = wrappers.DiscretizeAction(env, name, args.discretize)
-#   env = wrappers.ExpandScalars(env)
-#   if args.length:
-#     env = wrappers.TimeLimit(env, args.length, args.reset)
-#   if args.checks:
-#     env = wrappers.CheckSpaces(env)
-#   for name, space in env.act_space.items():
-#     if not space.discrete:
-#       env = wrappers.ClipAction(env, name)
-#   return env
-
+def wrap_env(env, config):
+  args = config.wrapper
+  for name, space in env.act_space.items():
+    if name == 'reset':
+      continue
+    elif not space.discrete:
+      env = wrappers.NormalizeAction(env, name)
+      if args.discretize:
+        env = wrappers.DiscretizeAction(env, name, args.discretize)
+  env = wrappers.ExpandScalars(env)
+  if args.length:
+    env = wrappers.TimeLimit(env, args.length, args.reset)
+  if args.checks:
+    env = wrappers.CheckSpaces(env)
+  for name, space in env.act_space.items():
+    if not space.discrete:
+      env = wrappers.ClipAction(env, name)
+  return env
 
 if __name__ == '__main__':
   main()
+
+  # python main.py --logdir ./logdir/test12m --configs size12m
