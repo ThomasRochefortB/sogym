@@ -12,7 +12,34 @@ from stable_baselines3 import PPO, A2C, SAC, TD3
 from stable_baselines3.common.evaluation import evaluate_policy
 import torch
 torch.autograd.set_detect_anomaly(True)
+import datetime
+import os
+import pickle
+import numpy as np
+from torch.utils.data import Dataset
 
+def load_expert_dataset(chunk_dir, env):
+    chunk_files = [os.path.join(chunk_dir, f) for f in os.listdir(chunk_dir) if f.endswith('.pkl')]
+    
+    expert_observations_list = []
+    expert_actions_list = []
+    
+    for chunk_file in chunk_files:
+        with open(chunk_file, 'rb') as f:
+            chunk_data = pickle.load(f)
+            expert_observations_list.append(chunk_data['expert_observations'])
+            expert_actions_list.append(chunk_data['expert_actions'])
+    
+    if isinstance(env.observation_space, gym.spaces.Dict):
+        expert_observations = {}
+        for key in env.observation_space.spaces.keys():
+            expert_observations[key] = np.concatenate([obs[key] for obs in expert_observations_list])
+    else:
+        expert_observations = np.concatenate(expert_observations_list)
+    
+    expert_actions = np.concatenate(expert_actions_list)
+    
+    return ExpertDataSet(expert_observations, expert_actions, env)
 
 class ExpertDataSet(Dataset):
     def __init__(self, expert_observations, expert_actions, env):
@@ -45,8 +72,7 @@ class ExpertDataSet(Dataset):
 
 def pretrain_agent(
     student,
-    expert_observations,
-    expert_actions,
+    expert_dataset,
     env,
     test_env,
     batch_size=64,
@@ -61,7 +87,8 @@ def pretrain_agent(
     plot_curves=True,
     tensorboard_log_dir="pretraining_bc",
     verbose=True,  # Added verbose option
-    save_path=None,  # Added save path argument
+    checkpoint_dir=None,  # Added checkpoint directory argument
+    load_checkpoint=False,  # Added load checkpoint argument
     comet_ml_api_key=None,  # Added Comet ML API key argument
     comet_ml_project_name=None,  # Added Comet ML project name argument
     comet_ml_experiment_name=None,  # Added Comet ML experiment name argument
@@ -224,7 +251,7 @@ def pretrain_agent(
         return test_loss, test_mae
 
 
-    expert_dataset = ExpertDataSet(expert_observations, expert_actions, env)
+    #expert_dataset = ExpertDataSet(expert_observations, expert_actions, env)
 
     train_size = int(0.8 * len(expert_dataset))
     test_size = len(expert_dataset) - train_size
@@ -244,6 +271,18 @@ def pretrain_agent(
 
     optimizer = optim.Adadelta(model.parameters(), lr=learning_rate,weight_decay=l2_reg_strength)
     scheduler = StepLR(optimizer, step_size=1, gamma=scheduler_gamma)
+    if load_checkpoint and checkpoint_dir is not None:
+        # Find the latest checkpoint in the checkpoint directory
+        checkpoint_folders = [f for f in os.listdir(checkpoint_dir) if os.path.isdir(os.path.join(checkpoint_dir, f))]
+        if checkpoint_folders:
+            latest_checkpoint = max(checkpoint_folders, key=lambda x: datetime.strptime(x, '%Y%m%d_%H%M%S'))
+            checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
+            # Load the model state from the checkpoint
+            student.load(os.path.join(checkpoint_path, 'model.pt'))
+            # Load the optimizer state from the checkpoint
+            optimizer.load_state_dict(torch.load(os.path.join(checkpoint_path, 'optimizer.pt')))
+            if verbose:
+                print(f"Loaded checkpoint from {checkpoint_path}")
 
     train_losses = []
     test_losses = []
@@ -287,11 +326,16 @@ def pretrain_agent(
         if test_loss < best_test_loss:
             best_test_loss = test_loss
             no_improvement_count = 0
-            # Save the best model if save_path is provided
-            if save_path is not None:
-                student.save(save_path)
-                if verbose:
-                    print(f"Saved best model to {save_path}")
+            # Create a new checkpoint folder with a unique name
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            checkpoint_path = os.path.join(checkpoint_dir, timestamp)
+            os.makedirs(checkpoint_path, exist_ok=True)
+            # Save the model inside the checkpoint folder
+            student.save(os.path.join(checkpoint_path, 'model.pt'))
+            # Save the optimizer state inside the checkpoint folder
+            torch.save(optimizer.state_dict(), os.path.join(checkpoint_path, 'optimizer.pt'))
+            if verbose:
+                print(f"Saved checkpoint to {checkpoint_path}")
         else:
             no_improvement_count += 1
 
