@@ -16,7 +16,7 @@ env_kwargs = {
 }
 
 directory_path = "/home/thomas/Documents/scratch_thomas/GitHub/sogym_v2/dataset/topologies_narval"
-expert_observations, expert_actions = generate_expert_dataset(directory_path,env_kwargs, plot_terminated=False,num_permutations = num_permutations, file_fraction=1.0)
+expert_observations, expert_actions = generate_expert_dataset(directory_path,env_kwargs,observation_type=observation_type, plot_terminated=False,num_permutations = num_permutations, file_fraction=1.0)
 # Save the dataset
 
 # Determine the permutation part of the filename

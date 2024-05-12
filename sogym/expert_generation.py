@@ -11,6 +11,7 @@ import re
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from itertools import permutations
 from multiprocessing import Pool, cpu_count
+from functools import partial
 
 # Third-party imports
 import numpy as np
@@ -427,7 +428,7 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
 
 
 
-def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=False, num_processes=None, num_permutations=1, file_fraction=1.0):
+def generate_expert_dataset(directory_path, env_kwargs=None,observation_type = 'topopt_game', plot_terminated=False, num_processes=None, num_permutations=1, file_fraction=1.0, chunk_size=1000):
     if num_processes is None:
         num_processes = mp.cpu_count()
     pool = mp.Pool(processes=num_processes, maxtasksperchild=10)
@@ -441,32 +442,64 @@ def generate_expert_dataset(directory_path, env_kwargs=None, plot_terminated=Fal
 
     process_file_partial = partial(process_file, env_kwargs, plot_terminated, directory_path=directory_path, num_permutations=num_permutations)
 
-    expert_observations_list = []
-    expert_actions_list = []
+    chunk_counter = 0
 
-    with tqdm(total=len(selected_files), desc="Processing files", unit="file") as pbar:
-        results = pool.imap_unordered(process_file_partial, selected_files)
-        for result in results:
-            if result is not None:
-                for expert_observations, expert_actions in result:
-                    expert_observations_list.append(expert_observations)
-                    expert_actions_list.append(expert_actions)
-            pbar.update(1)
+    try:
+        with tqdm(total=len(selected_files), desc="Processing files", unit="file") as pbar:
+            results = pool.imap_unordered(process_file_partial, selected_files)
+            expert_observations_list = []
+            expert_actions_list = []
 
-        # Exhaust the iterator to ensure all tasks are completed
-        for _ in results:
-            pass
+            for result in results:
+                if result is not None:
+                    for expert_observations, expert_actions in result:
+                        expert_observations_list.append(expert_observations)
+                        expert_actions_list.append(expert_actions)
 
-    pool.close()
-    pool.join()
+                        if len(expert_observations_list) >= chunk_size:
+                            if isinstance(sogym(**env_kwargs).observation_space, spaces.Dict):
+                                expert_observations = {key: np.concatenate([obs[key] for obs in expert_observations_list]) for key in expert_observations_list[0].keys()}
+                            else:
+                                expert_observations = np.concatenate(expert_observations_list)
 
-    if isinstance(sogym(**env_kwargs).observation_space, spaces.Dict):
-        expert_observations = {key: np.concatenate([obs[key] for obs in expert_observations_list]) for key in expert_observations_list[0].keys()}
-    else:
-        expert_observations = np.concatenate(expert_observations_list)
+                            expert_actions = np.concatenate(expert_actions_list)
 
-    expert_actions = np.concatenate(expert_actions_list)
+                            # Determine the permutation part of the filename
+                            if num_permutations is None:
+                                perm_str = 'noperm'
+                            else:
+                                perm_str = f"{num_permutations}perm"
+                            filename = f"dataset/expert/expert_dataset_{observation_type}_{perm_str}_chunk_{chunk_counter}.pkl"
 
-    return expert_observations, expert_actions
+                            # Save the data using pickle
+                            with open(filename, 'wb') as f:
+                                pickle.dump({'expert_observations': expert_observations, 'expert_actions': expert_actions}, f, protocol=4)
+                                f.flush()
+                                os.fsync(f.fileno())
 
+                            expert_observations_list = []
+                            expert_actions_list = []
+                            chunk_counter += 1
 
+                pbar.update(1)
+
+            # Save any remaining data
+            if len(expert_observations_list) > 0:
+                if isinstance(sogym(**env_kwargs).observation_space, spaces.Dict):
+                    expert_observations = {key: np.concatenate([obs[key] for obs in expert_observations_list]) for key in expert_observations_list[0].keys()}
+                else:
+                    expert_observations = np.concatenate(expert_observations_list)
+
+                expert_actions = np.concatenate(expert_actions_list)
+
+                filename = f"dataset/expert/expert_dataset_{observation_type}_{perm_str}_chunk_{chunk_counter}.pkl"
+
+                with open(filename, 'wb') as f:
+                    pickle.dump({'expert_observations': expert_observations, 'expert_actions': expert_actions}, f, protocol=4)
+                    f.flush()
+                    os.fsync(f.fileno())
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        pool.terminate()
