@@ -95,6 +95,7 @@ def pretrain_agent(
     n_eval_episodes=10,
     eval_freq=10,
     l2_reg_strength=0.0,
+    max_grad_norm = None,
 ):
     use_cuda = not no_cuda and th.cuda.is_available()
     th.manual_seed(seed)
@@ -319,7 +320,7 @@ def pretrain_agent(
         experiment = None
 
     for epoch in range(1, epochs + 1):
-        train_loss = train(model, device, train_loader, optimizer, epoch, max_grad_norm=1.0)
+        train_loss = train(model, device, train_loader, optimizer, epoch, max_grad_norm=max_grad_norm)
         test_loss, test_mae = test(model, device, test_loader)
 
         train_losses.append(train_loss)
