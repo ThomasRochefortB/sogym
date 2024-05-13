@@ -1,13 +1,13 @@
+import os
+os.environ['OPENBLAS_NUM_THREADS'] = '1'       #Disactivate multiprocessing for numpy
 # Standard library imports
 import codecs
 import datetime
 import glob
 import json
 import multiprocessing as mp
-import os
 import pickle
 import random
-import re
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from itertools import permutations
 from multiprocessing import Pool, cpu_count
@@ -26,7 +26,9 @@ from sogym.struct import build_design
 
 # Local module imports from imitation
 from imitation.data.types import Trajectory
-
+import hashlib
+from multiprocessing import Pool, Manager
+import shutil
 
 # Let's load an expert sample:
 def count_top (filepath):
@@ -428,7 +430,9 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
 
 
 
-def generate_expert_dataset(directory_path, env_kwargs=None,observation_type = 'topopt_game', plot_terminated=False, num_processes=None, num_permutations=1, file_fraction=1.0, chunk_size=1000):
+
+
+def generate_expert_dataset(directory_path, env_kwargs=None, observation_type='topopt_game', plot_terminated=False, num_processes=None, num_permutations=1, file_fraction=1.0, chunk_size=1000):
     if num_processes is None:
         num_processes = mp.cpu_count()
     pool = mp.Pool(processes=num_processes, maxtasksperchild=10)
@@ -443,6 +447,18 @@ def generate_expert_dataset(directory_path, env_kwargs=None,observation_type = '
     process_file_partial = partial(process_file, env_kwargs, plot_terminated, directory_path=directory_path, num_permutations=num_permutations)
 
     chunk_counter = 0
+    # Determine the permutation part of the filename at the start
+    if num_permutations is None:
+        perm_str = 'noperm'
+    else:
+        perm_str = f"{num_permutations}perm"
+    
+    # Get the last name of the directory of directory_path:
+    directory_path_name = directory_path.split('/')[-1]
+    # Create a unique directory for this run based on the current datetime
+    current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_directory = f"dataset/expert/{directory_path_name}_{observation_type}_{current_time}"
+    os.makedirs(output_directory, exist_ok=True)
 
     try:
         with tqdm(total=len(selected_files), desc="Processing files", unit="file") as pbar:
@@ -464,12 +480,7 @@ def generate_expert_dataset(directory_path, env_kwargs=None,observation_type = '
 
                             expert_actions = np.concatenate(expert_actions_list)
 
-                            # Determine the permutation part of the filename
-                            if num_permutations is None:
-                                perm_str = 'noperm'
-                            else:
-                                perm_str = f"{num_permutations}perm"
-                            filename = f"dataset/expert/expert_dataset_{observation_type}_{perm_str}_chunk_{chunk_counter}.pkl"
+                            filename = os.path.join(output_directory, f"expert_dataset_{observation_type}_{perm_str}_chunk_{chunk_counter}.pkl")
 
                             # Save the data using pickle
                             with open(filename, 'wb') as f:
@@ -492,7 +503,7 @@ def generate_expert_dataset(directory_path, env_kwargs=None,observation_type = '
 
                 expert_actions = np.concatenate(expert_actions_list)
 
-                filename = f"dataset/expert/expert_dataset_{observation_type}_{perm_str}_chunk_{chunk_counter}.pkl"
+                filename = os.path.join(output_directory, f"expert_dataset_{observation_type}_{perm_str}_chunk_{chunk_counter}.pkl")
 
                 with open(filename, 'wb') as f:
                     pickle.dump({'expert_observations': expert_observations, 'expert_actions': expert_actions}, f, protocol=4)
@@ -503,3 +514,76 @@ def generate_expert_dataset(directory_path, env_kwargs=None,observation_type = '
         print(f"An error occurred: {e}")
     finally:
         pool.terminate()
+
+
+## These functions check expert topologies for duplicate boundary conditions to ensure good diversity in the pretraining dataset
+def process_file_duplicate(file_path, boundary_conditions_dict, duplicates, unique_files):
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+        boundary_conditions = data.get('boundary_conditions')
+        if boundary_conditions:
+            boundary_conditions_str = json.dumps(boundary_conditions, sort_keys=True)
+            boundary_conditions_hash = hashlib.md5(boundary_conditions_str.encode('utf-8')).hexdigest()
+            if boundary_conditions_hash in boundary_conditions_dict:
+                duplicates.append(file_path)
+                duplicates.append(boundary_conditions_dict[boundary_conditions_hash])
+            else:
+                boundary_conditions_dict[boundary_conditions_hash] = file_path
+                unique_files.append(file_path)
+
+def check_duplicates(folder_path, percentage=100):
+    all_json_files = [os.path.join(folder_path, file) for file in os.listdir(folder_path) if file.endswith('.json')]
+    
+    # Calculate the number of files to process
+    num_files_to_process = int(len(all_json_files) * percentage / 100)
+    
+    # Select the files to process (you can shuffle here if you want a random subset)
+    # random.shuffle(all_json_files)  # Uncomment to randomize the order before selecting
+    json_files = all_json_files[:num_files_to_process]
+
+    manager = Manager()
+    boundary_conditions_dict = manager.dict()
+    duplicates = manager.list()
+    unique_files = manager.list()
+
+    # Set up a progress bar
+    pbar = tqdm(total=len(json_files), desc="Processing files")
+
+    def update(*a):
+        # This function will be called once the worker completes a task
+        pbar.update()
+
+    with Pool() as pool:
+        results = []
+        for file in json_files:
+            result = pool.apply_async(process_file_duplicate, (file, boundary_conditions_dict, duplicates, unique_files), callback=update)
+            results.append(result)
+
+        # Wait for all tasks to complete
+        for result in results:
+            result.wait()
+
+    pbar.close()
+
+    if duplicates:
+        with open('duplicate.txt', 'w') as f:
+            for duplicate in duplicates:
+                f.write(duplicate + '\n')
+        print("Duplicates found. Check 'duplicate.txt' for the list of duplicate files.")
+    else:
+        print("No duplicates found.")
+
+    with open('unique_files.txt', 'w') as f:
+        for unique_file in unique_files:
+            f.write(unique_file + '\n')
+    print("Unique files listed in 'unique_files.txt'.")
+
+def copy_unique_files(unique_files_file, destination_folder):
+    os.makedirs(destination_folder, exist_ok=True)
+    with open(unique_files_file, 'r') as f:
+        unique_files = f.read().splitlines()
+    for file_path in unique_files:
+        file_name = os.path.basename(file_path)
+        destination_path = os.path.join(destination_folder, file_name)
+        shutil.copy2(file_path, destination_path)
+    print(f"Unique files copied to '{destination_folder}'.")
