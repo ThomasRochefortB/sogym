@@ -69,7 +69,7 @@ def run_mmc(BC_dict,nelx,nely,dx,dy,plotting='component',verbose=0,cfg=None):   
             'scl':1, #scale factor for obj
             'p':6,  #power of super ellipsoid
             'lmd':100, #power of KS aggregation   
-            'maxiter':500, # maximum number of outer iterations
+            'maxiter':1000, # maximum number of outer iterations
             'alpha':1e-9, # This is the threshold level in the Heaviside function
             'epsilon':0.2, #This is the regularization term in the Heaviside function
             'maxinnerinit':1, # This is the maximum number of inner iterations for GCMMA
