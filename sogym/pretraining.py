@@ -86,16 +86,15 @@ def pretrain_agent(
     early_stopping_patience=10,
     plot_curves=True,
     tensorboard_log_dir="pretraining_bc",
-    verbose=True,  # Added verbose option
-    checkpoint_dir=None,  # Added checkpoint directory argument
-    load_checkpoint=False,  # Added load checkpoint argument
-    comet_ml_api_key=None,  # Added Comet ML API key argument
-    comet_ml_project_name=None,  # Added Comet ML project name argument
-    comet_ml_experiment_name=None,  # Added Comet ML experiment name argument
-    n_eval_episodes=10,  # Added number of evaluation episodes argument
-    eval_freq=10,  # Added policy evaluation frequency parameter
+    verbose=True,
+    checkpoint_dir=None,
+    load_checkpoint=False,
+    comet_ml_api_key=None,
+    comet_ml_project_name=None,
+    comet_ml_experiment_name=None,
+    n_eval_episodes=10,
+    eval_freq=10,
     l2_reg_strength=0.0,
-
 ):
     use_cuda = not no_cuda and th.cuda.is_available()
     th.manual_seed(seed)
@@ -250,9 +249,6 @@ def pretrain_agent(
 
         return test_loss, test_mae
 
-
-    #expert_dataset = ExpertDataSet(expert_observations, expert_actions, env)
-
     train_size = int(0.8 * len(expert_dataset))
     test_size = len(expert_dataset) - train_size
     train_expert_dataset, test_expert_dataset = random_split(
@@ -269,25 +265,41 @@ def pretrain_agent(
         **kwargs,
     )
 
-    optimizer = optim.Adadelta(model.parameters(), lr=learning_rate,weight_decay=l2_reg_strength)
+    optimizer = optim.Adadelta(model.parameters(), lr=learning_rate, weight_decay=l2_reg_strength)
     scheduler = StepLR(optimizer, step_size=1, gamma=scheduler_gamma)
-    if load_checkpoint and checkpoint_dir is not None:
-        # Find the latest checkpoint in the checkpoint directory
-        checkpoint_folders = [f for f in os.listdir(checkpoint_dir) if os.path.isdir(os.path.join(checkpoint_dir, f))]
-        if checkpoint_folders:
-            latest_checkpoint = max(checkpoint_folders, key=lambda x: datetime.strptime(x, '%Y%m%d_%H%M%S'))
-            checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
+
+    if load_checkpoint is not None and checkpoint_dir is not None:
+        if load_checkpoint == 'best':
+            # Load the best checkpoint
+            model_file = 'model_best.pt'
+            optimizer_file = 'optimizer_best.pt'
+        elif load_checkpoint == 'latest':
+            # Load the latest checkpoint
+            model_file = 'model_latest.pt'
+            optimizer_file = 'optimizer_latest.pt'
+        else:
+            raise ValueError("Invalid load_checkpoint value. Must be 'best' or 'latest'.")
+
+        model_path = os.path.join(checkpoint_dir, model_file)
+        optimizer_path = os.path.join(checkpoint_dir, optimizer_file)
+
+        if os.path.exists(model_path) and os.path.exists(optimizer_path):
             # Load the model state from the checkpoint
-            student.load(os.path.join(checkpoint_path, 'model.pt'))
+            student.load(model_path)
             # Load the optimizer state from the checkpoint
-            optimizer.load_state_dict(torch.load(os.path.join(checkpoint_path, 'optimizer.pt')))
+            optimizer.load_state_dict(torch.load(optimizer_path))
             if verbose:
-                print(f"Loaded checkpoint from {checkpoint_path}")
+                print(f"Loaded model from {model_path}")
+                print(f"Loaded optimizer from {optimizer_path}")
+        else:
+            if verbose:
+                print("Checkpoint files not found. Starting training from scratch.")
 
     train_losses = []
     test_losses = []
     best_test_loss = float('inf')
-    no_improvement_count = 0
+    best_model_path = None
+    best_optimizer_path = None
 
     if plot_curves:
         plt.ion()
@@ -308,7 +320,7 @@ def pretrain_agent(
 
     for epoch in range(1, epochs + 1):
         train_loss = train(model, device, train_loader, optimizer, epoch, max_grad_norm=1.0)
-        test_loss,test_mae = test(model, device, test_loader)
+        test_loss, test_mae = test(model, device, test_loader)
 
         train_losses.append(train_loss)
         test_losses.append(test_loss)
@@ -317,7 +329,6 @@ def pretrain_agent(
             train_line.set_data(range(1, epoch + 1), train_losses)
             test_line.set_data(range(1, epoch + 1), test_losses)
             ax.relim()
-            # add grid lines:
             ax.grid(True)
             ax.autoscale_view(True, True, True)
             fig.canvas.draw()
@@ -325,19 +336,20 @@ def pretrain_agent(
 
         if test_loss < best_test_loss:
             best_test_loss = test_loss
-            no_improvement_count = 0
-            # Create a new checkpoint folder with a unique name
-            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            checkpoint_path = os.path.join(checkpoint_dir, timestamp)
-            os.makedirs(checkpoint_path, exist_ok=True)
-            # Save the model inside the checkpoint folder
-            student.save(os.path.join(checkpoint_path, 'model.pt'))
-            # Save the optimizer state inside the checkpoint folder
-            torch.save(optimizer.state_dict(), os.path.join(checkpoint_path, 'optimizer.pt'))
+            # Save the best model and optimizer
+            best_model_path = os.path.join(checkpoint_dir, f'model_best.pt')
+            best_optimizer_path = os.path.join(checkpoint_dir, f'optimizer_best.pt')
+            student.save(best_model_path)
+            torch.save(optimizer.state_dict(), best_optimizer_path)
             if verbose:
-                print(f"Saved checkpoint to {checkpoint_path}")
-        else:
-            no_improvement_count += 1
+                print(f"Saved best model to {best_model_path}")
+                print(f"Saved best optimizer to {best_optimizer_path}")
+
+        # Save the latest model and optimizer
+        latest_model_path = os.path.join(checkpoint_dir, f'model_latest.pt')
+        latest_optimizer_path = os.path.join(checkpoint_dir, f'optimizer_latest.pt')
+        student.save(latest_model_path)
+        torch.save(optimizer.state_dict(), latest_optimizer_path)
 
         if epoch % eval_freq == 0:
             # Evaluate the student policy on the test environment
@@ -346,15 +358,9 @@ def pretrain_agent(
             writer.add_scalar("std_reward", std_reward, epoch)
             if verbose:
                 print(f"Epoch {epoch}: Mean reward = {mean_reward:.3f} +/- {std_reward:.3f}")
-            # Log the evaluation metrics to Comet ML
             if experiment is not None:
                 experiment.log_metric("mean_reward", mean_reward, step=epoch)
                 experiment.log_metric("std_reward", std_reward, step=epoch)
-
-        if no_improvement_count >= early_stopping_patience:
-            if verbose:
-                print(f"Early stopping at epoch {epoch}")
-            break
 
         scheduler.step()
 
