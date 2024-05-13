@@ -12,6 +12,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from itertools import permutations
 from multiprocessing import Pool, cpu_count
 from functools import partial
+import socket
 
 # Third-party imports
 import numpy as np
@@ -60,7 +61,7 @@ def load_top (filepath):
 
     return dict
 
-def generate_mmc_solutions(key,dataset_folder):
+def generate_mmc_solutions(key, dataset_folder):
     """
     Generate a single solution for the MMC problem and save it in the dataset folder.
 
@@ -71,7 +72,12 @@ def generate_mmc_solutions(key,dataset_folder):
     Returns:
         None: The function saves the solution in the dataset folder.
     """
-    env = sogym(mode='train',observation_type='dense',vol_constraint_type='soft',seed=key,resolution=50)
+    # Generate a unique seed using the key, hostname, and process ID
+    hostname = socket.gethostname()
+    pid = os.getpid()
+    unique_seed = hash((key, hostname, pid)) % (2**32)
+
+    env = sogym(mode='train', observation_type='dense', vol_constraint_type='soft', seed=unique_seed, resolution=50)
     obs = env.reset()
     xval, f0val, num_iter, H, Phimax, allPhi, den,N, cfg =  run_mmc(env.conditions,env.nelx,env.nely,env.dx,env.dy,plotting='nothing',verbose=0)
     #out_conditions = train_env.conditions.copy()
