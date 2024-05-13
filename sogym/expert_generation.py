@@ -426,12 +426,6 @@ def process_file(env_kwargs, plot_terminated, filename, directory_path, num_perm
         print(f"Error processing {filename}: {str(e)}")
         return None  # Indicates failure
 
-
-
-
-
-
-
 def generate_expert_dataset(directory_path, env_kwargs=None, observation_type='topopt_game', plot_terminated=False, num_processes=None, num_permutations=1, file_fraction=1.0, chunk_size=1000):
     if num_processes is None:
         num_processes = mp.cpu_count()

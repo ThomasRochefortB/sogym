@@ -140,3 +140,5 @@ imitation_tb_logs/
 logdir/
 *.zip
 *.pkl
+*.gif
+*.pt
