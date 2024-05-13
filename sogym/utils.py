@@ -159,6 +159,51 @@ class CustomBoxDense(BaseFeaturesExtractor):
     def forward(self, observations: th.Tensor) -> th.Tensor:
         return self.linear(observations)
 
+import numpy as np
+import matplotlib.pyplot as plt
+from sogym.expert_generation import load_top, find_endpoints, variables_2_actions
+
+def visualize_expert_trajectory(env, file_path):
+    """
+    Visualizes and saves an expert trajectory based on a given environment and a JSON file path.
+
+    Parameters:
+    - env: The environment instance where the trajectory will be visualized.
+    - file_path: The path to the JSON file containing the expert solution data.
+
+    The function saves the visualization as 'expert_trajectory.png'.
+    """
+    # Load the expert solution from the JSON file
+    mmc_solution = load_top(file_path)
+
+    # Extract the starting dictionary from the solution
+    start_dict = {
+        'dx': mmc_solution['dx'],
+        'dy': mmc_solution['dy'],
+        'nelx': mmc_solution['nelx'],
+        'nely': mmc_solution['nely'],
+        'conditions': mmc_solution['boundary_conditions']
+    }
+
+    # Extract the design variables and split them into components
+    design_variables = mmc_solution['design_variables']
+    components = np.split(np.array(design_variables), mmc_solution['number_components'])
+
+    # Reset the environment with the starting conditions
+    obs, info = env.reset(start_dict=start_dict)
+
+    # Iterate over each component to simulate actions based on the environment
+    for single_component in components:
+        endpoints = find_endpoints(env, single_component[0], single_component[1], single_component[2], single_component[5])
+        endpoints = np.append(endpoints, single_component[3:5])
+
+        action = variables_2_actions(env, endpoints)
+        obs, reward, terminated, truncated, info = env.step(action)
+
+    # Plot the final environment state
+    fig = env.plot()
+    fig.savefig('expert_trajectory.png')
+    plt.close(fig)
 
 
 
