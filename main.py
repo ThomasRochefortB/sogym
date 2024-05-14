@@ -176,7 +176,7 @@ def make_replay(config, directory=None, is_eval=False, rate_limit=False):
 def make_env(config, env_id=0):
     from embodied.envs import from_gym
     from sogym.env_gym import sogym
-    env = sogym(mode='train',observation_type='topopt_game',vol_constraint_type = 'hard',resolution=50,img_format = 'HWC',check_connectivity=True,use_std_strain=True) # Replace this with your Gym env.
+    env = sogym(mode='train',observation_type='topopt_game',vol_constraint_type = 'hard',resolution=50,img_format = 'HWC',check_connectivity=True,use_std_strain=False) # Replace this with your Gym env.
     env = from_gym.FromGym(env)
     env = wrap_env(env, config)
     return env
@@ -184,7 +184,7 @@ def make_env(config, env_id=0):
 def make_eval_env(config, env_id=0):
     from embodied.envs import from_gym
     from sogym.env_gym import sogym
-    env = sogym(mode='test',observation_type='topopt_game',vol_constraint_type = 'hard',resolution=50,img_format = 'HWC',check_connectivity=True,use_std_strain=True) # Replace this with your Gym env.
+    env = sogym(mode='test',observation_type='topopt_game',vol_constraint_type = 'hard',resolution=50,img_format = 'HWC',check_connectivity=True,use_std_strain=False) # Replace this with your Gym env.
     env = from_gym.FromGym(env)
 
     env = wrap_env(env, config)
@@ -213,3 +213,9 @@ if __name__ == '__main__':
   main()
 
   # python main.py --logdir ./logdir/test12m --configs size12m
+
+  # python main.py   --logdir ./logdir/12m_initial --configs size12m --run.script train_eval --run.eval_eps 10 --replay.size 5e5 --run.num_envs 24
+
+  #  python main.py   --logdir ./logdir/50m_initial --configs size50m --run.script train_eval --run.eval_eps 10 --replay.size 5e5 --run.num_envs 24
+
+  # python main.py   --logdir ./logdir/200m_initial --configs size200m --run.script train_eval --run.eval_eps 10 --replay.size 5e5 --run.num_envs 24 --
