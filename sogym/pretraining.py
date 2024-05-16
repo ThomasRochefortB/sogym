@@ -95,7 +95,7 @@ def pretrain_agent(
     n_eval_episodes=10,
     eval_freq=10,
     l2_reg_strength=0.0,
-    max_grad_norm = None,
+    max_grad_norm=None,
 ):
     use_cuda = not no_cuda and th.cuda.is_available()
     th.manual_seed(seed)
@@ -120,44 +120,32 @@ def pretrain_agent(
 
         for batch_idx, (data, target) in enumerate(train_loader):
             if isinstance(data, dict):
-                # Handle Dict observation space
                 data = {k: v.to(device) for k, v in data.items()}
             else:
-                # Handle Box observation space
                 data = data.to(device)
             target = target.to(device)
             optimizer.zero_grad()
 
             if isinstance(env.action_space, gym.spaces.Box):
-                # A2C/PPO policy outputs actions, values, log_prob
-                # SAC/TD3 policy outputs actions only
                 if isinstance(student, (A2C, PPO)):
                     action, _, _ = model(data)
                 else:
-                    # SAC/TD3:
                     action = model(data)
                 action_prediction = action.double()
             else:
-                # Retrieve the logits for A2C/PPO when using discrete actions
                 dist = model.get_distribution(data)
                 action_prediction = dist.distribution.logits
                 target = target.long()
 
             loss = criterion(action_prediction, target)
-            # Calculate L2 regularization loss
             l2_reg_loss = 0.0
             for param in model.parameters():
                 l2_reg_loss += torch.norm(param, 2)
-
-            # Add L2 regularization loss to the total loss
             loss += l2_reg_strength * l2_reg_loss
             train_loss += loss.item()
             loss.backward()
-
-            # Clip gradients
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
 
-            # Calculate gradient norm after clipping
             grad_norm = 0
             for p in model.parameters():
                 if p.grad is not None:
@@ -180,12 +168,9 @@ def pretrain_agent(
                     )
                 )
 
-
         train_loss /= num_batches
         if verbose:
             print(f"Train set: Average loss: {train_loss:.4f}")
-
-        # Log training loss and gradient norm to TensorBoard
         writer.add_scalar("Loss/train", train_loss, epoch)
         writer.add_scalar("Grad Norm", grad_norm, epoch)
         if experiment is not None:
@@ -202,31 +187,23 @@ def pretrain_agent(
         with th.no_grad():
             for data, target in test_loader:
                 if isinstance(data, dict):
-                    # Handle Dict observation space
                     data = {k: v.to(device) for k, v in data.items()}
                 else:
-                    # Handle Box observation space
                     data = data.to(device)
                 target = target.to(device)
 
                 if isinstance(env.action_space, gym.spaces.Box):
-                    # A2C/PPO policy outputs actions, values, log_prob
-                    # SAC/TD3 policy outputs actions only
                     if isinstance(student, (A2C, PPO)):
                         action, _, _ = model(data)
                     else:
-                        # SAC/TD3:
                         action = model(data)
                     action_prediction = action.double()
                 else:
-                    # Retrieve the logits for A2C/PPO when using discrete actions
                     dist = model.get_distribution(data)
                     action_prediction = dist.distribution.logits
                     target = target.long()
 
                 test_loss += criterion(action_prediction, target).item()
-                
-                # Calculate MAE
                 if isinstance(env.action_space, gym.spaces.Box):
                     mae = th.mean(th.abs(action_prediction - target))
                 else:
@@ -237,16 +214,12 @@ def pretrain_agent(
         test_mae /= num_batches
         if verbose:
             print(f"Test set: Average loss: {test_loss:.4f}, Average MAE: {test_mae:.4f}")
-
-        # Log test loss and MAE to TensorBoard
         writer.add_scalar("Loss/test", test_loss, epoch)
         writer.add_scalar("MAE/test", test_mae, epoch)
-        # Log test loss and MAE to Comet ML
         if experiment is not None:
             experiment.log_metric("test_loss", test_loss, step=epoch)
             experiment.log_metric("test_mae", test_mae, step=epoch)
             experiment.log_metric("mae", test_mae, step=epoch)
-
 
         return test_loss, test_mae
 
@@ -271,11 +244,9 @@ def pretrain_agent(
 
     if load_checkpoint is not None and checkpoint_dir is not None:
         if load_checkpoint == 'best':
-            # Load the best checkpoint
             model_file = 'model_best.pt'
             optimizer_file = 'optimizer_best.pt'
         elif load_checkpoint == 'latest':
-            # Load the latest checkpoint
             model_file = 'model_latest.pt'
             optimizer_file = 'optimizer_latest.pt'
         else:
@@ -285,9 +256,7 @@ def pretrain_agent(
         optimizer_path = os.path.join(checkpoint_dir, optimizer_file)
 
         if os.path.exists(model_path) and os.path.exists(optimizer_path):
-            # Load the model state from the checkpoint
             student.load(model_path)
-            # Load the optimizer state from the checkpoint
             optimizer.load_state_dict(torch.load(optimizer_path))
             if verbose:
                 print(f"Loaded model from {model_path}")
@@ -301,6 +270,8 @@ def pretrain_agent(
     best_test_loss = float('inf')
     best_model_path = None
     best_optimizer_path = None
+    best_mean_reward = -float('inf')
+    early_stopping_counter = 0
 
     if plot_curves:
         plt.ion()
@@ -337,7 +308,6 @@ def pretrain_agent(
 
         if test_loss < best_test_loss:
             best_test_loss = test_loss
-            # Save the best model and optimizer
             best_model_path = os.path.join(checkpoint_dir, f'model_best.pt')
             best_optimizer_path = os.path.join(checkpoint_dir, f'optimizer_best.pt')
             student.save(best_model_path)
@@ -346,14 +316,12 @@ def pretrain_agent(
                 print(f"Saved best model to {best_model_path}")
                 print(f"Saved best optimizer to {best_optimizer_path}")
 
-        # Save the latest model and optimizer
         latest_model_path = os.path.join(checkpoint_dir, f'model_latest.pt')
         latest_optimizer_path = os.path.join(checkpoint_dir, f'optimizer_latest.pt')
         student.save(latest_model_path)
         torch.save(optimizer.state_dict(), latest_optimizer_path)
 
         if epoch % eval_freq == 0:
-            # Evaluate the student policy on the test environment
             mean_reward, std_reward = evaluate_policy(student, test_env, n_eval_episodes=n_eval_episodes)
             writer.add_scalar("mean_reward", mean_reward, epoch)
             writer.add_scalar("std_reward", std_reward, epoch)
@@ -363,11 +331,20 @@ def pretrain_agent(
                 experiment.log_metric("mean_reward", mean_reward, step=epoch)
                 experiment.log_metric("std_reward", std_reward, step=epoch)
 
+            if mean_reward > best_mean_reward:
+                best_mean_reward = mean_reward
+                early_stopping_counter = 0
+            else:
+                early_stopping_counter += 1
+                if early_stopping_counter >= early_stopping_patience:
+                    if verbose:
+                        print(f"Early stopping triggered after {epoch} epochs.")
+                    break
+
         scheduler.step()
 
     student.policy = model
 
-    # Close the SummaryWriter and Comet ML experiment
     writer.close()
     if experiment is not None:
         experiment.end()
