@@ -7,7 +7,6 @@ import yaml
 from datetime import datetime
 
 from stable_baselines3.common.noise import NormalActionNoise
-import stable_baselines3
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize, SubprocVecEnv, VecCheckNan
 from stable_baselines3 import PPO, A2C, SAC, TD3

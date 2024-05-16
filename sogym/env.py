@@ -3,14 +3,12 @@ from gymnasium import spaces
 from sogym.struct import build_design, calculate_compliance, calculate_strains, calculate_stresses
 from sogym.rand_bc import generate_prompt
 import numpy as np
-import random
 from sogym.rand_bc import gen_randombc
 import cv2
 import math
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from PIL import Image, ImageDraw
 
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
