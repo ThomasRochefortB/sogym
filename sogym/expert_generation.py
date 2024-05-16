@@ -126,6 +126,10 @@ def generate_dataset(dataset_folder, num_threads=1, num_samples=10):
         num_threads (int, optional): Number of threads to use for multiprocessing. Defaults to 1.
         num_samples (int, optional): Number of samples to generate. Defaults to 10.
     """
+       # Create the dataset folder if it does not exist
+    if not os.path.exists(dataset_folder):
+        os.makedirs(dataset_folder)
+
     if num_threads >1:
         nbrAvailCores=num_threads
         pool = mp.Pool(processes=nbrAvailCores)
