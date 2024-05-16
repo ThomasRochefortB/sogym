@@ -15,8 +15,7 @@ class sogym(gym.Env):
 
     def __init__(self,N_components=8,resolution = 100, observation_type = 'dense',
                  mode = 'train',img_format='CHW',check_connectivity = False, 
-                 seed=None,vol_constraint_type='hard',model=None,tokenizer=None,
-                 use_std_strain = False):
+                 seed=None,vol_constraint_type='hard',use_std_strain = False):
         
         # Check if std_strain is True and observation_type is not 'topopt_game'
         if use_std_strain and observation_type != 'topopt_game':
