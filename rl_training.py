@@ -57,12 +57,16 @@ parser.add_argument('--training-phase', type=str, default='naive')
 parser.add_argument('--replay-buffer-path', type=str, default='')
 
 parser.add_argument('--restart-run', type=str, default='')
+
+parser.add_argument('--log-comet', action='store_true', help='Log to comet.ml.')
+
 args = parser.parse_args() 
 def main():
 
 
-    comet_ml.init(project_name="rl_training")
-    experiment = comet_ml.Experiment(api_key="No20MKxPKu7vWLOUQCFBRO8mo")
+    if args.log_comet:
+        comet_ml.init(project_name="rl_training")
+        experiment = comet_ml.Experiment(api_key="No20MKxPKu7vWLOUQCFBRO8mo")
 
     # Set number of CPUs to use automatically
     num_cpu = multiprocessing.cpu_count()
@@ -93,7 +97,8 @@ def main():
 
     log_name = restart_run if restart_run else f"{algorithm_name}_{current_datetime}"
 
-    experiment.set_name(log_name)
+    if args.log_comet:
+        experiment.set_name(log_name)
     # Create directory and config file if needed
     log_dir = f'./runs/{log_name}'
     if not os.path.exists(log_dir):
