@@ -143,7 +143,7 @@ def main():
         model = PPO(env=env, 
                     policy = chosen_policy, 
                     policy_kwargs=policy_kwargs,
-                    n_steps= 64*386 // num_cpu//100,
+                    n_steps= 64*386 // num_cpu,
                     batch_size= 16384//4,
                     tensorboard_log  ='./runs/{}'.format(log_name),
                     device = device, 
