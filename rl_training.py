@@ -109,11 +109,11 @@ def main():
             yaml.dump(save_params, file)
 
     # Create training and evaluation environments
-    train_env = sogym(mode='train', observation_type = args.observation_type, vol_constraint_type = 'hard', use_std_strain = False, check_connectivity = True, resolution = 50)
+    train_env = sogym(mode='train', **params)
     env = make_vec_env(lambda: train_env, n_envs=num_cpu, vec_env_cls=SubprocVecEnv)
     env = VecCheckNan(env, raise_exception=True)
 
-    eval_env = sogym(mode='test', **params)
+    eval_env = sogym(mode='test', observation_type = args.observation_type, vol_constraint_type = 'hard', use_std_strain = False, check_connectivity = True, resolution = 50)
     eval_env = make_vec_env(lambda: eval_env, n_envs=1, vec_env_cls=SubprocVecEnv)
         # The noise objects for TD3
     n_actions = env.action_space.shape[-1]
