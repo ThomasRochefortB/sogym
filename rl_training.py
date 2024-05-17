@@ -109,7 +109,7 @@ def main():
             yaml.dump(save_params, file)
 
     # Create training and evaluation environments
-    train_env = sogym(mode='train', **params)
+    train_env = sogym(mode='train', observation_type = args.observation_type, vol_constraint_type = 'hard', use_std_strain = False, check_connectivity = True, resolution = 50)
     env = make_vec_env(lambda: train_env, n_envs=num_cpu, vec_env_cls=SubprocVecEnv)
     env = VecCheckNan(env, raise_exception=True)
 
@@ -119,7 +119,7 @@ def main():
     n_actions = env.action_space.shape[-1]
     action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.5 * np.ones(n_actions))
 
-    chosen_policy = "MlpPolicy" if args.observation_type == 'box_dense' else "MultiInputPolicy"
+    chosen_policy = "MlpPolicy" if args.observation_type == 'vector' else "MultiInputPolicy"
     feature_extractor = ImageDictExtractor if args.observation_type == 'image' or args.observation_type=="topopt_game" else CustomBoxDense
 
 
