@@ -69,7 +69,7 @@ def main():
         experiment = comet_ml.Experiment(api_key="No20MKxPKu7vWLOUQCFBRO8mo")
 
     # Set number of CPUs to use automatically
-    num_cpu = multiprocessing.cpu_count()
+    num_cpu = multiprocessing.cpu_count()*2
     print(f"Using {num_cpu} CPUs!")
 
     algorithm_name = args.algorithm_name  # or "TD3"
