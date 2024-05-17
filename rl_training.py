@@ -95,7 +95,7 @@ def main():
     pretrained_run = None
     restart_run = args.restart_run  # or "PPO_20240516_093938"
 
-    log_name = restart_run if restart_run else f"{algorithm_name}_{current_datetime}"
+    log_name = restart_run if restart_run else f"{algorithm_name}_{current_datetime}_{os.getpid()}"
 
     if args.log_comet:
         experiment.set_name(log_name)
