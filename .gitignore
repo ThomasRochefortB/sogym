@@ -141,4 +141,4 @@ runs/
 *.pt
 
 .DS_Store
-./logdir
+logdir/

@@ -85,7 +85,7 @@ class sogym(gym.Env):
 
     def reset(self,seed=None,start_dict=None,options = None):
         
-        seed = self.seed
+        super().reset(seed=seed)
         if self.mode == 'test':
             self.counter+=1
             if self.counter>9:
