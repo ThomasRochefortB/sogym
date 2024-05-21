@@ -139,3 +139,5 @@ runs/
 *.pkl
 *.gif
 *.pt
+
+.DS_Store

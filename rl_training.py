@@ -7,7 +7,6 @@ import yaml
 from datetime import datetime
 
 from stable_baselines3.common.noise import NormalActionNoise
-import stable_baselines3
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize, SubprocVecEnv, VecCheckNan
 from stable_baselines3 import PPO, A2C, SAC, TD3
@@ -58,15 +57,19 @@ parser.add_argument('--training-phase', type=str, default='naive')
 parser.add_argument('--replay-buffer-path', type=str, default='')
 
 parser.add_argument('--restart-run', type=str, default='')
+
+parser.add_argument('--log-comet', action='store_true', help='Log to comet.ml.')
+
 args = parser.parse_args() 
 def main():
 
 
-    comet_ml.init(project_name="rl_training")
-    experiment = comet_ml.Experiment(api_key="No20MKxPKu7vWLOUQCFBRO8mo")
+    if args.log_comet:
+        comet_ml.init(project_name="rl_training")
+        experiment = comet_ml.Experiment(api_key="No20MKxPKu7vWLOUQCFBRO8mo")
 
     # Set number of CPUs to use automatically
-    num_cpu = multiprocessing.cpu_count()
+    num_cpu = multiprocessing.cpu_count()*2
     print(f"Using {num_cpu} CPUs!")
 
     algorithm_name = args.algorithm_name  # or "TD3"
@@ -92,9 +95,10 @@ def main():
     pretrained_run = None
     restart_run = args.restart_run  # or "PPO_20240516_093938"
 
-    log_name = restart_run if restart_run else f"{algorithm_name}_{current_datetime}"
+    log_name = restart_run if restart_run else f"{algorithm_name}_{current_datetime}_{os.getpid()}"
 
-    experiment.set_name(log_name)
+    if args.log_comet:
+        experiment.set_name(log_name)
     # Create directory and config file if needed
     log_dir = f'./runs/{log_name}'
     if not os.path.exists(log_dir):
@@ -109,13 +113,13 @@ def main():
     env = make_vec_env(lambda: train_env, n_envs=num_cpu, vec_env_cls=SubprocVecEnv)
     env = VecCheckNan(env, raise_exception=True)
 
-    eval_env = sogym(mode='test', **params)
+    eval_env = sogym(mode='test', observation_type = args.observation_type, vol_constraint_type = 'hard', use_std_strain = False, check_connectivity = True, resolution = 50)
     eval_env = make_vec_env(lambda: eval_env, n_envs=1, vec_env_cls=SubprocVecEnv)
         # The noise objects for TD3
     n_actions = env.action_space.shape[-1]
     action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.5 * np.ones(n_actions))
 
-    chosen_policy = "MlpPolicy" if args.observation_type == 'box_dense' else "MultiInputPolicy"
+    chosen_policy = "MlpPolicy" if args.observation_type == 'vector' else "MultiInputPolicy"
     feature_extractor = ImageDictExtractor if args.observation_type == 'image' or args.observation_type=="topopt_game" else CustomBoxDense
 
 
@@ -139,7 +143,7 @@ def main():
         model = PPO(env=env, 
                     policy = chosen_policy, 
                     policy_kwargs=policy_kwargs,
-                    n_steps= 64*386 // num_cpu//100,
+                    n_steps= 64*386 // num_cpu,
                     batch_size= 16384//4,
                     tensorboard_log  ='./runs/{}'.format(log_name),
                     device = device, 
