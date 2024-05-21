@@ -132,21 +132,22 @@ class ImageDictExtractor(BaseFeaturesExtractor):
     
 
 class CustomBoxDense(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Box, hidden_size: int = 32, noise_scale: float = 0.0,device='cpu',batch_norm=True):
+    def __init__(self, observation_space: gym.spaces.Box, hidden_size: int = 128, noise_scale: float = 0.0,device='cpu',batch_norm=False):
         super().__init__(observation_space, features_dim=hidden_size)
         # We assume CxHxW images (channels first)
         # Re-ordering will be done by pre-preprocessing or wrapper
         self.noise_scale = noise_scale
         input_len = observation_space.shape[0]
-        self.linear = nn.Sequential(
-            nn.Linear(input_len, hidden_size),
-            nn.BatchNorm1d(hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.BatchNorm1d(hidden_size),
-            nn.ReLU(),
-            nn.Flatten(),
-        )
+        if batch_norm == True:
+            self.linear = nn.Sequential(
+                nn.Linear(input_len, hidden_size),
+                nn.BatchNorm1d(hidden_size),
+                nn.ReLU(),
+                nn.Linear(hidden_size, hidden_size),
+                nn.BatchNorm1d(hidden_size),
+                nn.ReLU(),
+                nn.Flatten(),
+            )
         if batch_norm == False:
             self.linear = nn.Sequential(
                 nn.Linear(input_len, hidden_size),
