@@ -84,6 +84,7 @@ class sogym(gym.Env):
             raise ValueError('Invalid observation space type. Only "vector_dict", "vector", "image", "topopt_game"  are supported.')
 
     def reset(self,seed=None,start_dict=None,options = None):
+        
         seed = self.seed
         if self.mode == 'test':
             self.counter+=1
