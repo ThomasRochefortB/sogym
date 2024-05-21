@@ -3,22 +3,19 @@ from gymnasium import spaces
 from sogym.struct import build_design, calculate_compliance, calculate_strains, calculate_stresses
 from sogym.rand_bc import generate_prompt
 import numpy as np
-import random
 from sogym.rand_bc import gen_randombc
 import cv2
 import math
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from PIL import Image, ImageDraw
 
 #Class defining the Structural Optimization Gym environment (so-gym):
 class sogym(gym.Env):
 
-    def __init__(self,N_components=8,resolution = 100, observation_type = 'dense',
+    def __init__(self,N_components=8,resolution = 100, observation_type = 'topopt_game',
                  mode = 'train',img_format='CHW',check_connectivity = False, 
-                 seed=None,vol_constraint_type='hard',model=None,tokenizer=None,
-                 use_std_strain = False):
+                 seed=None,vol_constraint_type='hard',use_std_strain = False):
         
         # Check if std_strain is True and observation_type is not 'topopt_game'
         if use_std_strain and observation_type != 'topopt_game':
@@ -46,7 +43,7 @@ class sogym(gym.Env):
         elif self.img_format == 'HWC':
             img_shape = (self.image_resolution,self.image_resolution,3)
 
-        if self.observation_type =='dense':
+        if self.observation_type =='vector_dict':
             self.observation_space = spaces.Dict(
                                         {
                                             "beta": spaces.Box(-1, 2.0, (27,),dtype=np.float32), # Description vector \beta containing (TO DO)
@@ -55,7 +52,7 @@ class sogym(gym.Env):
                                             "volume":spaces.Box(0,1,(1,),dtype=np.float32), # Current volume at the current step
                                             }
                                         )
-        elif self.observation_type =='box_dense':
+        elif self.observation_type =='vector':
             self.observation_space = spaces.Box(low=-np.pi, high=np.pi, 
                                                 shape=(27+1+1+self.N_components*self.N_actions,), 
                                                 dtype=np.float32) 
@@ -84,7 +81,7 @@ class sogym(gym.Env):
             )
         
         else:
-            raise ValueError('Invalid observation space type. Only "dense", "box_dense", "image", "topopt_game" & "text_dict"(experimental) are supported.')
+            raise ValueError('Invalid observation space type. Only "vector_dict", "vector", "image", "topopt_game"  are supported.')
 
     def reset(self,seed=None,start_dict=None,options = None):
         seed = self.seed
@@ -104,8 +101,6 @@ class sogym(gym.Env):
             self.conditions = start_dict['conditions']
 
             
-        if self.observation_type == 'text_dict':
-            prompt = generate_prompt(self.conditions,self.dx,self.dy)
             self.model_output =  self.model(self.tokenizer(prompt, return_tensors="pt",padding = 'max_length').input_ids.to(self.device)).last_hidden_state.detach().cpu().numpy().flatten()
         self.EW=self.dx / self.nelx # length of element
         self.EH=self.dy/ self.nely # width of element     
@@ -148,13 +143,13 @@ class sogym(gym.Env):
         # I need to initialize an empty instance of Phi:
         self.Phi = np.zeros(((self.nelx+1)*(self.nely+1), self.N_components))
 
-        if self.observation_type=='dense':
+        if self.observation_type=='vector_dict':
             self.observation={"beta":np.float32(self.beta),
                             "design_variables":np.float32(self.variables.flatten()),
                             "volume":np.array([0.0],dtype=np.float32),
                             "n_steps_left":np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
                             }
-        elif self.observation_type=='box_dense':        
+        elif self.observation_type=='vector':        
             self.observation=np.concatenate(
                 (np.float32(self.beta),
                  np.array([0.0],dtype=np.float32),
@@ -185,16 +180,6 @@ class sogym(gym.Env):
                                 "structure_strain_energy": empty_structure_strain_energy,
                                 "score": np.array([0.0], dtype=np.float32)
                                 }
-
-        elif self.observation_type == 'text_dict':
-            self.observation = {
-                "prompt": np.float32(self.model_output),
-                "design_variables": np.float32(self.variables.flatten()),
-                "volume": np.array([0.0], dtype=np.float32),
-                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components],dtype=np.float32),
-            }
-        else:
-            raise ValueError('Invalid observation space type. Only "dense" and "image" are supported.')
         info ={}
         return (self.observation,info )
         
@@ -311,14 +296,14 @@ class sogym(gym.Env):
         return reward
 
     def update_observation(self,is_connected):
-        if self.observation_type == 'dense':
+        if self.observation_type == 'vector_dict':
             self.observation = {
                 "beta": np.float32(self.beta),
                 "design_variables": np.float32(self.variables.flatten()) / np.pi,
                 "volume": np.array([self.volume], dtype=np.float32),
                 "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
             }
-        elif self.observation_type == 'box_dense':
+        elif self.observation_type == 'vector':
             self.observation = np.concatenate(
                 (np.float32(self.beta),
                 np.array([self.volume], dtype=np.float32),
@@ -346,15 +331,7 @@ class sogym(gym.Env):
                 "score": np.array([1 / np.log(self.compliance / len(self.conditions['loaddof_x']) + 1e-8)], dtype=np.float32) if self.volume <= self.conditions['volfrac'] and is_connected else np.array([0.0], dtype=np.float32)
             }
 
-        elif self.observation_type == 'text_dict':
-            self.observation = {
-                "prompt": np.float32(self.model_output),
-                "design_variables": np.float32(self.variables.flatten()) / np.pi,
-                "volume": np.array([self.volume], dtype=np.float32),
-                "n_steps_left": np.array([(self.N_components - self.action_count) / self.N_components], dtype=np.float32),
-            }
-        else:
-            raise ValueError('Invalid observation space type. Only "dense", "box_dense", "text_dict", and "image" are supported.')
+
 
     def process_structure_strain_energy(self, is_connected):
         # Create a grayscale image of the structure

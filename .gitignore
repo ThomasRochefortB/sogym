@@ -134,11 +134,10 @@ env_saved.pkl
 model_saved.zip
 
 dataset/
-tb_logs/
-imit_tensorboard/
-imitation_tb_logs/
-logdir/
+runs/
 *.zip
 *.pkl
 *.gif
 *.pt
+
+.DS_Store
