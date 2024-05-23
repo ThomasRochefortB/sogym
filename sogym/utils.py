@@ -131,6 +131,69 @@ class ImageDictExtractor(BaseFeaturesExtractor):
         return th.cat(encoded_tensor_list, dim=1)
     
 
+class ImpalaDictExtractor(BaseFeaturesExtractor):
+
+    def __init__(self, observation_space: gym.spaces.Dict,drop_rate=0.0,activ_func_string='relu',last_conv_size=128,mlp_size=256):
+        # We do not know features-dim here before going over all the items,
+        # so put something dummy for now. PyTorch requires calling
+        # nn.Module.__init__ before adding modules
+
+        super().__init__(observation_space, features_dim=1)
+        self.drop_rate = drop_rate
+        activations = {
+        'relu': nn.ReLU(),
+        'sigmoid': nn.Sigmoid(),
+        'tanh': nn.Tanh(),
+        'leaky_relu': nn.LeakyReLU(),}
+
+        self.activ_func = activations[activ_func_string]
+        self.last_conv_size = last_conv_size
+        self.mlp_size = mlp_size
+
+        extractors = {}
+        total_concat_size = 0
+        # We need to know size of the output of this extractor,
+        # so go over all the spaces and compute output feature sizes
+        for key, subspace in observation_space.spaces.items():
+            
+            if key =='image' or key=='structure_strain_energy':
+                #image is channel-first in SB3 convention: (C, H, W)
+                #default is 64,128,3
+                input_h ,input_w, input_c = subspace.shape[1],subspace.shape[2],subspace.shape[0]
+                extractors[key]= nn.Sequential(
+                                                nn.Conv2d( input_c, 16, kernel_size=8, stride=4, padding=1), #output is 15x15x16
+                                                self.activ_func,
+                                                nn.Conv2d(16, 32, kernel_size=4, stride=2, padding=1), #Output is 7x7x32
+                                                self.activ_func,
+                                                nn.Flatten(),
+                                                nn.Linear(32*7*7, self.mlp_size),
+                                                self.activ_func,
+                                                nn.Flatten()
+                                            )
+                total_concat_size+= (self.mlp_size)
+            elif key == "design_variables" or key=="volume" or key=="n_steps_left" or key =="conditions" or key=="score":
+                # run through a simple MLP
+                extractors[key] = nn.Sequential(
+                                                nn.Linear(subspace.shape[0], self.mlp_size),
+                                                self.activ_func,
+                                                nn.Flatten()
+                                               )
+                total_concat_size += (self.mlp_size)
+  
+        self.extractors = nn.ModuleDict(extractors)
+
+        # Update the features dim manually
+        self._features_dim = total_concat_size
+
+    def forward(self, observations) -> th.Tensor:
+        encoded_tensor_list = []
+
+        # self.extractors contain nn.Modules that do all the processing.
+        for key, extractor in self.extractors.items():
+            encoded_tensor_list.append(extractor(observations[key]))
+        # Return a (B, self._features_dim) PyTorch tensor, where B is batch dimension.
+        return th.cat(encoded_tensor_list, dim=1)
+
 class CustomBoxDense(BaseFeaturesExtractor):
     def __init__(self, observation_space: gym.spaces.Box, hidden_size: int = 128, noise_scale: float = 0.0,device='cpu',batch_norm=False):
         super().__init__(observation_space, features_dim=hidden_size)

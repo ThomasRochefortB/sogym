@@ -11,9 +11,10 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize, SubprocVecEnv, VecCheckNan
 from stable_baselines3 import PPO, A2C, SAC, TD3
 from stable_baselines3.common.callbacks import EvalCallback, CallbackList, CheckpointCallback, StopTrainingOnNoModelImprovement
+from sb3_contrib import RecurrentPPO
 
 from sogym.env import sogym
-from sogym.utils import ImageDictExtractor, CustomBoxDense
+from sogym.utils import ImageDictExtractor, CustomBoxDense, ImpalaDictExtractor
 from sogym.callbacks import FigureRecorderCallback, MaxRewardCallback, GradientNormCallback, GradientClippingCallback
 import torch
 import multiprocessing
@@ -85,8 +86,8 @@ def main():
         experiment = comet_ml.Experiment(api_key="No20MKxPKu7vWLOUQCFBRO8mo")
 
     # Set number of CPUs to use automatically
-    num_cpu = int(os.getenv('SLURM_CPUS_PER_TASK'))*2
-    # num_cpu = multiprocessing.cpu_count() * 2
+    #num_cpu = int(os.getenv('SLURM_CPUS_PER_TASK'))*2
+    num_cpu = int(multiprocessing.cpu_count() * 1)
     print(f"Using {num_cpu} workers!")
 
     algorithm_name = args.algorithm_name  # or "TD3"
@@ -144,8 +145,11 @@ def main():
     print("Evaluation environment created.")
 
     chosen_policy = "MlpPolicy" if args.observation_type == 'vector' else "MultiInputPolicy"
+    chosen_policy = "MultiInputLstmPolicy" if args.algorithm_name == 'RecurrentPPO' else chosen_policy
     print(chosen_policy)
+
     feature_extractor = ImageDictExtractor if args.observation_type == 'image' or args.observation_type == "topopt_game" else CustomBoxDense
+    feature_extractor = ImpalaDictExtractor if args.algorithm_name == 'RecurrentPPO' else feature_extractor
     print(feature_extractor)
 
     policy_kwargs = dict(
@@ -155,15 +159,27 @@ def main():
     )
     print("Creating model for algorithm: {}".format(algorithm_name))
 
-    model = PPO(env=env, 
-                policy=chosen_policy, 
-                policy_kwargs=policy_kwargs,
-                n_steps=(64 * 256) // num_cpu,
-                batch_size=(64 * 256 )// 4,
-                tensorboard_log=f'./runs/{log_name}',
-                verbose=1,
-                device=device, 
-                **algorithm_params)
+    if algorithm_name == 'PPO':
+        model = PPO(env=env, 
+                    policy=chosen_policy, 
+                    policy_kwargs=policy_kwargs,
+                    n_steps=(64 * 256) // num_cpu,
+                    batch_size=(64 * 256 )// 2,
+                    tensorboard_log=f'./runs/{log_name}',
+                    verbose=1,
+                    device=device, 
+                    **algorithm_params)
+    elif algorithm_name == 'RecurrentPPO':
+         model = RecurrentPPO(
+                    env=env,                          
+                    policy = chosen_policy,
+                    policy_kwargs=policy_kwargs,
+                    n_steps= 64*386 // num_cpu,
+                    batch_size= 16384//2,
+                    tensorboard_log  ='./runs/{}'.format(log_name),
+                    device = device, 
+                    **algorithm_params)
+
 
     print("Model created.")
 
