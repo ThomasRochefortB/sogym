@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 class sogym(gym.Env):
 
     def __init__(self,N_components=8,resolution = 100, observation_type = 'topopt_game',
-                 mode = 'train',img_format='CHW',check_connectivity = False, 
+                 mode = 'train',obs_image_resolution = 64, img_format='CHW',check_connectivity = False, 
                  seed=None,vol_constraint_type='hard',use_std_strain = False):
         
         # Check if std_strain is True and observation_type is not 'topopt_game'
@@ -32,16 +32,16 @@ class sogym(gym.Env):
         self.counter=0  
         self.resolution = resolution
         self.fig = plt.figure(dpi=100)
-        self.image_resolution = 64
+        self.obs_image_resolution = obs_image_resolution
         self.reward = 0.0
         self.render_colors = ['yellow','g','r','c','m','y','black','orange','pink','cyan','slategrey',
                               'wheat','purple','mediumturquoise','darkviolet','orangered']
 
         self.action_space = spaces.Box(low=-1,high=1,shape=(self.N_actions,), dtype=np.float32)
         if self.img_format == 'CHW':
-            img_shape = (3,self.image_resolution,self.image_resolution)
+            img_shape = (3,self.obs_image_resolution,self.obs_image_resolution)
         elif self.img_format == 'HWC':
-            img_shape = (self.image_resolution,self.image_resolution,3)
+            img_shape = (self.obs_image_resolution,self.obs_image_resolution,3)
 
         if self.observation_type =='vector_dict':
             self.observation_space = spaces.Dict(
@@ -159,7 +159,7 @@ class sogym(gym.Env):
                  ,axis=0)
 
         elif self.observation_type =='image':
-            self.observation = {"image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
+            self.observation = {"image": self.gen_image(resolution=(self.obs_image_resolution, self.obs_image_resolution)),
                                 "beta": np.float32(self.beta),
                                 "design_variables": np.float32(self.variables.flatten()),
                                 "volume": np.array([0.0], dtype=np.float32),
@@ -169,11 +169,11 @@ class sogym(gym.Env):
 
         elif self.observation_type == 'topopt_game':
             if self.img_format == 'CHW':
-                empty_structure_strain_energy = np.zeros((3, self.image_resolution, self.image_resolution), dtype=np.uint8)
+                empty_structure_strain_energy = np.zeros((3, self.obs_image_resolution, self.obs_image_resolution), dtype=np.uint8)
             elif self.img_format == 'HWC':
-                empty_structure_strain_energy = np.zeros((self.image_resolution, self.image_resolution, 3), dtype=np.uint8)
+                empty_structure_strain_energy = np.zeros((self.obs_image_resolution, self.obs_image_resolution, 3), dtype=np.uint8)
 
-            self.observation = {"image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
+            self.observation = {"image": self.gen_image(resolution=(self.obs_image_resolution, self.obs_image_resolution)),
                                 "beta": np.float32(self.beta),
                                 "design_variables": np.float32(self.variables.flatten()),
                                 "volume": np.array([0.0], dtype=np.float32),
@@ -314,7 +314,7 @@ class sogym(gym.Env):
             
         elif self.observation_type == 'image':
             self.observation = {
-                "image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
+                "image": self.gen_image(resolution=(self.obs_image_resolution, self.obs_image_resolution)),
                 "beta": np.float32(self.beta),
                 "design_variables": np.float32(self.variables.flatten()) / np.pi,
                 "volume": np.array([self.volume], dtype=np.float32),
@@ -323,7 +323,7 @@ class sogym(gym.Env):
         elif self.observation_type == 'topopt_game':
             structure_strain_energy_image = self.process_structure_strain_energy(is_connected)
             self.observation = {
-                "image": self.gen_image(resolution=(self.image_resolution, self.image_resolution)),
+                "image": self.gen_image(resolution=(self.obs_image_resolution, self.obs_image_resolution)),
                 "beta": np.float32(self.beta),
                 "design_variables": np.float32(self.variables.flatten()) / np.pi,
                 "volume": np.array([self.volume], dtype=np.float32),
@@ -358,8 +358,8 @@ class sogym(gym.Env):
             strain_energy_jet[self.H.reshape((self.nely + 1, self.nelx + 1), order='F') < 0.1] = 255
 
             # Resize the structure image and strain energy image to the desired resolution
-            structure_image_resized = cv2.resize(structure_image, (self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
-            strain_energy_jet_resized = cv2.resize(strain_energy_jet, (self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
+            structure_image_resized = cv2.resize(structure_image, (self.obs_image_resolution, self.obs_image_resolution), interpolation=cv2.INTER_CUBIC)
+            strain_energy_jet_resized = cv2.resize(strain_energy_jet, (self.obs_image_resolution, self.obs_image_resolution), interpolation=cv2.INTER_CUBIC)
 
             # Expand the dimensions of structure_image_resized to match the number of channels in strain_energy_jet_resized
             structure_image_resized = np.expand_dims(structure_image_resized, axis=-1)
@@ -369,7 +369,7 @@ class sogym(gym.Env):
             structure_strain_energy = cv2.addWeighted(structure_image_resized, 0.3, strain_energy_jet_resized, 0.7, 0)
         else:
             structure_strain_energy = cv2.cvtColor(structure_image, cv2.COLOR_GRAY2RGB)
-            structure_strain_energy = cv2.resize(structure_strain_energy, (self.image_resolution, self.image_resolution), interpolation=cv2.INTER_CUBIC)
+            structure_strain_energy = cv2.resize(structure_strain_energy, (self.obs_image_resolution, self.obs_image_resolution), interpolation=cv2.INTER_CUBIC)
 
         # Flip the image horizontally
         structure_strain_energy_image = structure_strain_energy
