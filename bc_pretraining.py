@@ -125,7 +125,7 @@ def main():
         plot_curves=True,
         tensorboard_log_dir=f"imitation_tb_logs/{experiment_name}",
         save_path=f"checkpoints/{experiment_name}",
-        comet_ml_api_key="No20MKxPKu7vWLOUQCFBRO8mo",
+        comet_ml_api_key="",
         comet_ml_project_name="pretraining_rl",
         comet_ml_experiment_name=experiment_name,
         eval_freq=5,
