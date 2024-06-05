@@ -83,7 +83,7 @@ def main():
     if args.log_comet:
         print("Initializing comet_ml...")
         comet_ml.init(project_name="rl_training")
-        experiment = comet_ml.Experiment(api_key="No20MKxPKu7vWLOUQCFBRO8mo")
+        experiment = comet_ml.Experiment(api_key="")
 
     # Set number of CPUs to use automatically
     #num_cpu = int(os.getenv('SLURM_CPUS_PER_TASK'))*2
