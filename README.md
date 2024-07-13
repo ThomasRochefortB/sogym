@@ -85,7 +85,9 @@ The environment's reward function can be modified to fit multiple constrained to
 
 ---
 ## Citation
-To cite this library, please refer to the following paper:
+To cite this library, please refer to the following paper: 
+
+Rochefort-Beaudoin, T., Vadean, A., Aage, N., & Achiche, S. (2024). Structural Design Through Reinforcement Learning. arXiv preprint arXiv:2407.07288.
 
 ---
 ## References
